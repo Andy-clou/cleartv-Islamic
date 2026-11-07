@@ -2,12 +2,16 @@ tools/venv/
 tools/adbkey/
 __pycache__/
 launcher/.gradle/
+launcher/.build-local/
 launcher/build/
 launcher/app/build/
 launcher/local.properties
 # your own TV's dumps (serial, android_id, device names) stay local
 backup/
 .DS_Store
+
+# Local TV captures used for visual checks; keep them out of commits unless added deliberately.
+/tv-screenshot*.png
 
 # App banners for the webOS simulator preview only: other companies' logos, kept out of the repository.
 webos/samples/
