@@ -193,9 +193,13 @@ else is needed:
 
 ```powershell
 python -m venv tools\venv; tools\venv\Scripts\python.exe -m pip install -r tools\requirements.txt
+powershell -ExecutionPolicy Bypass -File launcher\build-release.ps1
 powershell -ExecutionPolicy Bypass -File launcher\build-and-install.ps1 -TvHost 192.168.1.50
 powershell -ExecutionPolicy Bypass -File tools\disable.ps1 -TvHost 192.168.1.50 examples\xiaomi-mi-tv-4a\debloat.txt
 ```
+
+Run the build command from a regular Windows PowerShell window, outside restricted agent shells. It sets
+the local JDK 17, Android SDK, Gradle cache and Android user directories before building.
 
 The install scripts ask the TV which launcher owns Home and only disable one they recognise
 (`tvlauncher` or `launcherx`); pass `STOCK_LAUNCHER=<package>` (`-StockLauncher`) to override, or

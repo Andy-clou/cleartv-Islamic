@@ -1,7 +1,7 @@
-# Instructions for AI agents
+﻿# Instructions for AI agents
 
 You are helping someone set up **Clear TV Islamic** on their own TV: on Android TV and Google TV, debloat it and install
-this launcher as the home screen, with **JAKIM prayer times under the clock, the azan at every prayer, an Islamic
+this launcher as the home screen, with **Indonesian prayer times and weather resolved from the device location, the azan at every prayer, an Islamic
 screensaver with verses of the Quran, and mosque photos behind Home** (Mecca, Medina and more); on LG webOS, install
 the webOS app. The Islamic features are the reason people install this version: they only turn on with the Islamic
 theme of step 6, so **never finish without step 6**. This file is the playbook. It is written for any brand and for any
@@ -158,9 +158,13 @@ Written so that any model can follow it to the letter:
   path without spaces.
 - Configure in `launcher/app/src/main/res/values/config.xml`, or better with a theme (step 6): ask which four
   apps go in the dock and in what order, using the package names from `pm list packages -3`.
-- Build: `cd launcher && ./gradlew testReleaseUnitTest assembleRelease`. The APK must stay under 400 KB
-  (CI checks it).
-- **Check**: `launcher/app/build/outputs/apk/release/app-release.apk` exists and is about 300 KB.
+- Build: `cd launcher && ./gradlew testReleaseUnitTest assembleRelease`. On Windows, use
+  `powershell -ExecutionPolicy Bypass -File launcher\build-release.ps1` from a normal Windows PowerShell
+  window outside a restricted Codex shell. JDK 17 must resolve cached JAR paths with `toRealPath`; inside
+  the Codex sandbox that fails with `AccessDeniedException` while javac closes ZipFS archives. The script
+  selects the local JDK/SDK and keeps their user directories stable across builds.
+- CI allows a release APK up to 1.2 MB because this Islamic checkout bundles an offline Home wallpaper photo.
+- **Check**: `launcher/app/build/outputs/apk/release/app-release.apk` exists and stays below 1.2 MB.
 
 ### 5. Install and make it Home
 
@@ -187,42 +191,16 @@ Written so that any model can follow it to the letter:
   on the remote to see it.` A line starting with `ERROR:` means it stopped and already put the stock launcher
   back; the message says what to do next.
 
-### 6. The Islamic theme: prayer times, azan, mosques, screensaver (never skip)
+### 6. The Islamic theme: prayer times, weather, azan, photos, screensaver (never skip)
 
-Without this step the TV shows the plain launcher (a grey clock and Bing's places), and the person will think the
-install failed. Do all of it:
+The Islamic theme enables location-based prayer times, weather, azan, and the screensaver. The launcher resolves the device location to a kabupaten/kota, gets prayer times and Hijri date from myQuran API v3, reads current weather from Open-Meteo, and downloads the mosque photos listed in `themes/islamik/masjid.json` for local use.
 
-1. **Ask where they live** (state and district) and find their **JAKIM zone code** on
-   [e-solat.gov.my](https://www.e-solat.gov.my): for example `WLY01` Kuala Lumpur and Putrajaya, `SGR01` Gombak,
-   Petaling, Sepang, Hulu Langat, Hulu Selangor and Shah Alam, `JHR02` Johor Bahru, Kota Tinggi, Mersing and Kulai,
-   `TRG04` Kemaman and Dungun. Never guess a zone: wrong prayer times are worse than none. Check it answers:
-   `curl -s "https://www.e-solat.gov.my/index.php?r=esolatApi/TakwimSolat&period=today&zone=<ZONE>"` must return a
-   `prayerTime` list. If they are outside Malaysia, say plainly that the prayer times come from JAKIM and cover
-   Malaysia only, and ask before going on.
-2. **Make their theme folder** from the Islamic one, outside the tracked files: `cp -R themes/islamik backup/theme`
-   (`backup/` is gitignored). In `backup/theme/config.json` set `"prayer_zone"` to their zone, and add
-   `"dock_apps"` with the four apps they picked, in order (package names from `pm list packages -3`).
-3. **The azan**: `themes/islamik` already has `azan.mp3` (Ustaz Asri Ibrahim, Rabbani) and `azan-subuh.mp3`. Ask
-   whether they want these or their own recordings; theirs replace the files of the same name.
-4. **Mosque photos**: `python3 tools/masjid-photos.py backup/theme` (13 photos, about 9 MB, from Wikimedia Commons;
-   say so before downloading). They go behind Home and the screensaver.
-5. **Push it**: `TV_HOST=<ip> tools/theme.sh backup/theme` (Windows: `tools\theme.ps1 -TvHost <ip> backup\theme`).
-   With the photos and the azan this takes a few minutes.
-6. **The screensaver**: `settings put secure screensaver_components com.gathin.tvhome/.ClockDream`.
-7. **Check**, one at a time:
-   - `logcat -d -s TvHome.Solat` shows `saved 365 days for <ZONE>` within a minute (the TV needs internet).
-   - A screenshot of Home (ask first) shows the prayer row under the clock and a mosque behind the apps.
-   - With the person's go-ahead (it plays the azan aloud): `touch /sdcard/Android/data/com.gathin.tvhome/files/azan-now`,
-     press Home, and within a minute `logcat -d -s TvHome.Azan` shows `azan <prayer>` and the azan plays; any
-     button on the remote stops it.
-   - Over another app: `appops get com.gathin.tvhome SYSTEM_ALERT_WINDOW` says `allow` (the install script sets
-     it), and `dumpsys alarm | grep com.gathin.tvhome.AZAN` shows the next prayer's alarm. With the person's
-     go-ahead, open YouTube, `touch .../files/azan-now` and
-     `am broadcast -a com.gathin.tvhome.AZAN -n 'com.gathin.tvhome/.AzanAlarm$Receiver'`: a band with the azan slides
-     up over YouTube, and a button press stops it.
-   - `am start -n com.android.systemui/.Somnambulator` starts the screensaver: the gold clock, the prayer card and
-     a verse over a mosque photo. Any button ends it.
-
+1. Copy `themes/islamik` to a working folder such as `backup/theme` (the `backup/` directory is gitignored). Set `auto_location`, `weather`, `download_masjid`, and `azan` in `config.json` to match the person's preferences. Add `dock_apps` with the apps they chose.
+2. Explain that location permission and internet access are needed for automatic city resolution, prayer/weather refreshes, and the first photo download. The launcher keeps data and photos in its app storage for later use.
+3. The theme includes `azan.mp3` and `azan-subuh.mp3`; replace them with the person's preferred recordings if requested.
+4. Push the theme using `TV_HOST=<ip> tools/theme.sh backup/theme` (Windows: `tools\theme.ps1 -TvHost <ip> backup\theme`). Photo downloads run on the TV in the background.
+5. Set the screensaver component: `settings put secure screensaver_components com.gathin.tvhome/.ClockDream`.
+6. Check that location permission is granted, prayer times and weather appear, and mosque photos populate. Ask before capturing screenshots or triggering audible azan playback.
 ### 6b. Other settings and wallpapers (themes)
 
 A theme is a folder with `config.json` (and optional `wallpaper.jpg` or `wallpapers/`). Push it with
@@ -278,8 +256,7 @@ A theme is a folder with `config.json` (and optional `wallpaper.jpg` or `wallpap
 - The original Clean Your TV guide lives in [docs/CLEANYOURTV-README.md](docs/CLEANYOURTV-README.md); the tests
   read its TV table and counts. Keep its relative links pointing one level up (`../`).
 - Keep the launcher light: no new background services (the one exception is AzanOverlay, which runs only for the
-  length of an azan, started by an alarm at the prayer time), no network use but the weekly places pictures (none with
-  `"places": false`), one wallpaper bitmap
+  length of an azan, started by an alarm at the prayer time), network use for enabled prayer, weather, and wallpaper features, one wallpaper bitmap
   in memory, decoding off the main thread, nothing running while another app is in front.
 - Commits carry only the human author's identity. Don't add AI attribution lines.
 - Credit stays: this project is based on [Clean Your TV](https://github.com/Gathin23/cleanyourtv) by Gathin (MIT).

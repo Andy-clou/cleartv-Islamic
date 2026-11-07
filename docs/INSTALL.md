@@ -1,6 +1,6 @@
 # Installing Clear TV Islamic, step by step
 
-<p><b>English</b> · <a href="INSTALL.ms.md">Bahasa Melayu</a> · <a href="../README.md">Back to the README</a></p>
+<p><b>English</b> · <a href="INSTALL.id.md">Bahasa Indonesia</a> · <a href="../README.md">Back to the README</a></p>
 
 This guide is for anyone. You will not need to code, and you will not need Java or the Android SDK: you will copy
 a few commands from this page into your computer. It takes about 30 minutes, and everything can be undone.
@@ -55,7 +55,7 @@ Wi-Fi). Write down the number that looks like `192.168.1.50` or `10.0.0.23`. Ign
 
 ### 5. Download Clear TV Islamic
 
-1. Open [github.com/Pokka99/cleartv-Islamic](https://github.com/Pokka99/cleartv-Islamic).
+1. Open [github.com/Andy-clou/cleartv-Islamic](https://github.com/Andy-clou/cleartv-Islamic).]
 2. Press the green **Code** button, then **Download ZIP**.
 3. Unzip it into your **Documents** folder. You now have a folder called `cleartv-Islamic-main`.
 
@@ -136,22 +136,24 @@ If anything goes wrong, the script puts the TV's own home screen back by itself 
 2. Open `my-theme/config.json` in a text editor (TextEdit on Mac, Notepad on Windows). It looks like this:
    ```json
    {
-     "prayer_zone": "TRG04",
+     "auto_location": true,
+     "weather": true,
+     "download_masjid": true,
+     "download_azan": true,
      "azan": true,
      "reduced_motion": true
    }
    ```
-3. Change **`TRG04`** to your **JAKIM zone**. Find it on [e-solat.gov.my](https://www.e-solat.gov.my): the zone
-   list shows codes such as `WLY01` (Kuala Lumpur, Putrajaya), `SGR01` (Gombak, Petaling, Sepang, Hulu Langat,
-   Hulu Selangor, Shah Alam), `JHR02` (Johor Bahru, Kota Tinggi, Mersing, Kulai) or `TRG04` (Kemaman, Dungun).
+3. The launcher uses Android's current location to select the Indonesian city for prayer times and weather. The
+   first launch may ask you to allow location access. No city is guessed if Android cannot provide a location.
 4. Optional, to choose the four apps in the dock, add a line with their package names, for example:
    `"dock_apps": ["com.google.android.youtube.tv", "com.netflix.ninja", "com.tm.unifitv", "com.amazon.amazonvideo.livingroom"],`
    You can also arrange the apps later with the remote: hold **OK** on an app, choose **Move**.
 
 ### 12. Choose your azan (optional)
 
-`my-theme` already has an azan: **`azan.mp3`** (Ustaz Asri Ibrahim, Rabbani) for Zohor, Asar, Maghrib and
-Isyak, and **`azan-subuh.mp3`** for Subuh. To use another voice, replace either file with your own recording,
+`my-theme` already has an azan: **`azan.mp3`** (Ustaz Asri Ibrahim, Rabbani) for Zuhur, Asar, Magrib and
+Isya, and **`azan-subuh.mp3`** for Subuh. To use another voice, replace either file with your own recording,
 keeping exactly the same name.
 
 ### 13. Add the mosque photos (optional)
@@ -159,16 +161,17 @@ keeping exactly the same name.
 - **Mac:** `python3 tools/masjid-photos.py my-theme`
 - **Windows:** `py tools\masjid-photos.py my-theme`
 
-This downloads 13 photos (Masjid al-Haram, the Kaaba, the Prophet's Mosque, Quba, the Crystal Mosque, Putra
-Mosque, Istanbul, Brunei and more, about 9 MB) from Wikimedia Commons into `my-theme/masjid`.
+The launcher now downloads the 13 listed Wikimedia Commons photos automatically and stores them locally on the TV
+for Home and the screensaver. This optional command still downloads them to the computer so you can review or
+include them in a theme before sending it.
 
 ### 14. Send your settings to the TV
 
 - **Mac:** `tools/theme.sh my-theme`
 - **Windows:** `tools\theme.ps1 my-theme`
 
-With the photos and azan files this can take a few minutes. Home restarts with your prayer times under the
-clock. The year's prayer times arrive from JAKIM within a minute (the TV needs internet).
+With the photos and azan files this can take a few minutes. Home restarts with prayer times under the clock; the
+TV also fetches current weather for the detected location. Internet access is required.
 
 ### 15. Turn on the Islamic screensaver
 
@@ -221,7 +224,7 @@ by hand, an AI assistant such as Claude Code can do it with you safely: see [AGE
 | `timeout` or `connection refused` when connecting | USB debugging is off, the address is wrong, or the TV and computer are on different Wi-Fi networks. |
 | The "Allow USB debugging?" box never appears | Turn USB debugging off and on again, then connect again. |
 | Windows says scripts are disabled | Run `Set-ExecutionPolicy -Scope Process Bypass` in the same window (step 6). |
-| No prayer times under the clock | Check `prayer_zone` in `config.json`, that the TV has internet, then wait a minute. |
+| No prayer times or weather | Check that Android location is enabled and Clear TV Islamic has location permission; the TV also needs internet. |
 | No sound at the azan | The file must be named exactly `azan.mp3` and be inside `my-theme`; send it again (step 14). |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` | A different build of Clear TV Islamic is already installed: remove it first (`pm uninstall com.gathin.tvhome`), then step 10 again. |
 

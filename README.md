@@ -1,33 +1,35 @@
 # Clear TV Islamic
 
-<p><a href="README.ms.md">Bahasa Melayu</a> · <b>English</b> · <a href="docs/INSTALL.md">Step-by-step install guide</a> · <a href="docs/INSTALL.ms.md">Panduan pemasangan</a></p>
+<p><a>English</a> · <a href="docs/INSTALL.md">Step-by-step install guide</a> · <a href="docs/INSTALL.id.md">Panduan pemasangan</a></p>
 
-**Your Android TV or Google TV, fast and ad-free, with JAKIM prayer times, the azan at every prayer, verses of
-the Quran, and the world's most beautiful mosques behind your apps, Mecca and Medina among them.**
+**A calm, lightweight home screen for Android TV and Google TV, with Indonesian prayer times, local weather,
+azan, Quran verses, and online mosque photos that rotate behind Home.**
 
-Clear TV Islamic strips the bloat and ads from your TV over Wi-Fi, with no root and nothing that can't be undone,
-then swaps the ad-filled home screen for a light one in frosted glass. Behind your apps: Masjid al-Haram, the
-Prophet's Mosque, the Crystal Mosque and many more. Under the clock: today's five prayer times. When the TV
-rests: a gold clock, the Hijri date and a verse of the Quran. When the time comes: the azan.
+Clear TV Islamic replaces a crowded TV home screen with a remote-friendly horizontal app row, smooth focus
+animations, navigation sounds and a glass dock. Indonesian prayer times and local weather follow the TV's
+location. Mosque photos rotate behind Home every three minutes while the TV is online. The Islamic screensaver has
+its own downloaded mosque photos, prayer times, Hijri date and Quran verses. Optional setup tools can reduce
+preinstalled clutter without root access. Home has no bundled offline wallpaper; local theme pictures are available
+when you want a wallpaper that does not depend on an internet connection.
 
-<p>
-  <img src="docs/screenshots/promo-cleartv-1-home.jpg" width="32%" alt="Your TV, calm and ad-free: Home with Quba Mosque behind the apps and the prayer times under the clock">
-  <img src="docs/screenshots/promo-cleartv-2-ciri.jpg" width="32%" alt="At every prayer, the TV reminds you: JAKIM prayer times, the azan, verses of the Quran and mosques of the world">
-  <img src="docs/screenshots/promo-cleartv-3-screensaver.jpg" width="32%" alt="When the TV rests: the screensaver with a gold clock, the Hijri date, prayer times and a verse of the Quran">
-</p>
 
-- **JAKIM prayer times** for your zone under the clock, with the Hijri date and a countdown to the next prayer.
+- **Indonesian prayer times** from myQuran, selected automatically from the TV's location, with the next prayer
+  highlighted and a live countdown.
+- **Weather beside the clock**, with current temperature, conditions and the detected city.
 - **The azan** at every prayer, even while you watch YouTube or Netflix: full screen on Home, a band across the
   bottom over any other app, with the recitation of your choice (a different one for Subuh).
 - **An Islamic screensaver**: a gold clock, a card of the day's prayer times and a verse of the Quran that changes.
-- **Mosque photos** behind Home and the screensaver: Mecca, Medina, Terengganu, Putrajaya, Istanbul, Brunei...
+- **Online mosque photos for Home** from the curated `themes/islamik/masjid.json` list, changing every three
+  minutes. Photos stay in memory rather than being saved locally. The APK has no bundled offline wallpaper;
+  the screensaver separately downloads its own mosque photos to local storage.
 - **Light and clean**: ads, tracking and bloat switched off, and the TV clears its own caches every 15 days.
+- **Navigation feedback**: a short SoundPool tick when focus moves between apps. The Islamic theme keeps the glass dock visible and hides the Wi-Fi pill and Inputs shortcut.
+- **One horizontal app row**: browse installed apps with Left and Right; Up returns to the top bar. Favourite apps stay first, the focused tile enlarges, and its name appears above the tile.
 
 **New to this? Follow the [step-by-step install guide](docs/INSTALL.md)**: no coding, no Android SDK, about
 30 minutes. Built on [CleanYourTV](https://github.com/Gathin23/cleanyourtv) by Gathin (MIT).
 
-<sub>The promo pictures use photos from Wikimedia Commons: Quba Mosque (Muhammad Mahdi Karim, GFDL 1.2),
-Masjid al-Haram (Saudipics.com, CC BY-SA 4.0) and Jame' Asr Hassanil Bolkiah Mosque (Jorge Láscar, CC BY 2.0).</sub>
+<sub>Prayer times are from the myQuran API (Kemenag RI). Weather is from Open-Meteo.</sub>
 
 ## What you get
 
@@ -39,41 +41,30 @@ Masjid al-Haram (Saudipics.com, CC BY-SA 4.0) and Jame' Asr Hassanil Bolkiah Mos
   time it changes and the glass draws its patch of it.
 - **One selection that glides.** Between apps it is a pane of glass with the app's shadow under it; on the top
   bar and in the menus it is dark. It glides and changes shape from one to the next, never jumps.
-- **Places to visit that renew themselves.** Once a week the TV takes the pictures Bing has shown on its home
-  page over the past days — landmarks, landscapes, wildlife — deletes last week's and rotates through them,
-  dimmed so the clock and tiles stay readable. The shelf above the dock names each one, its country and a few
-  lines about it. Pictures with people in them are skipped: by the words in their caption, and by Android's
-  own face detector on the TV. No key, no account, nothing to set up.
-- **Every app tints the room.** The glow behind Home, and the glass with it, blends to the colour of whichever
-  app is selected.
+- **Clear app labels.** The focused app name appears at the top of its tile; other app labels and mosque photo captions stay hidden on Home.
 - **Arrange your apps from the remote.** Hold OK on an app for a glass menu with **Move** and **App info**.
   Move picks the app up: it wiggles, the arrows carry it (into or out of the dock too) and the other apps
   slide aside; OK puts it down. The order is kept, and apps installed later join at the end.
-- **An Inputs menu in glass.** The selection glides out of the Inputs button into the list of HDMI and AV
-  inputs, and Up from the top of the list glides it back.
+- **Hide apps without uninstalling them.** Hold OK on an app and choose **Hide app**. To bring it back, hold OK
+  on Settings and open **Hidden apps**, then choose the app to show again.
 - **Comes back as you left it.** Back from an app, the app you left is still selected; pressing Home on Home
   goes to the first app. When Android has closed Home to free memory, it comes back whole in one frame,
   with no black screen and no half-built dock.
 - **A clock screensaver.** A grey analog dial with a yellow-orange second hand that ticks, the time and
   date beneath, drifting a little each minute so nothing burns in.
-- **Rows feather out under the top bar** instead of being cut off when you scroll, and the Wi-Fi / Ethernet
-  button can be hidden (`show_network_pill`).
-- **Rotating wallpapers of your own** instead, with `"places": false`: put pictures in a theme's `wallpapers/`
-  folder and choose how often they change, down to every 5 seconds. Each picture is decoded in the background
-  and cross-faded.
+- **Use your own wallpapers** by setting `"masjid_home": false`: add `wallpaper.jpg` or images in a theme's
+  `wallpapers/` folder. The launcher downsamples them off the main thread and can rotate them on a theme interval.
 
 | | |
 |---|---|
-| ![Home with Quba Mosque behind the apps, the prayer times under the clock and the mosque's name above the dock](docs/screenshots/islamik-home.jpg) | ![Every app, scrolled down over a mosque photo, with the prayer times still under the clock](docs/screenshots/islamik-grid.jpg) |
-| *Home, with a mosque and the prayer times* | *Every app, feathering out under the top bar* |
-| ![The glass Inputs menu with HDMI 1 selected, over a mosque photo](docs/screenshots/islamik-inputs.jpg) | ![The Islamic screensaver: a gold clock, the Hijri date, the prayer-times card and a verse of the Quran over a mosque photo](docs/screenshots/screensaver-islamik.jpg) |
+| ![Home with Quba Mosque behind the apps and the prayer times under the clock](docs/screenshots/tv-screenshot-after-install.png) | ![The Islamic screensaver: a gold clock, the Hijri date, the prayer-times card and a verse of the Quran over a mosque photo](docs/screenshots/screensaver-islamik.jpg) |
 | *Inputs, in glass* | *The Islamic screensaver* |
 | ![The azan screen: a gold crescent with rings of light, "Telah masuk waktu Maghrib" (it is now time for Maghrib)](docs/screenshots/azan.jpg) | ![The azan band over another app: a gold crescent, "Telah masuk waktu Maghrib", the time and the Hijri date, and "press any button to stop the azan"](docs/screenshots/azan-over-apps.jpg) |
 | *The azan screen at prayer time, on Home* | *The azan over any other app, even YouTube or Netflix* |
 
 Still light: on a Xiaomi Mi TV with 1.8 GB of RAM the launcher uses about 80–100 MB and stays there over hours
-of use, one wallpaper is in memory at a time, the week's places take about 2 MB of storage, and nothing runs
-while you are inside an app, except the azan at prayer time.
+of use, one wallpaper bitmap is kept in memory at a time, and nothing runs while you are inside an app, except
+the azan at prayer time.
 
 ## Setting it up
 
@@ -108,19 +99,20 @@ clears their caches, leaving sign-ins and app data untouched.
 <img src="docs/screenshots/screensaver-islamik.jpg" width="49%" alt="The Islamic screensaver over a mosque photo">
 <img src="docs/screenshots/azan.jpg" width="49%" alt="The azan screen: a gold crescent and star with rings of light">
 
-- **Prayer times on Home:** a glass row under the clock with the Hijri date, today's five prayers (Subuh, Zohor,
-  Asar, Maghrib, Isyak), the next one highlighted and a countdown ("Asar dalam 12 min"). The whole year's times
-  are fetched once from [JAKIM e-Solat](https://www.e-solat.gov.my) and kept on the TV.
-- **The Islamic screensaver:** a gold clock, the Malay and Hijri dates, a card of the prayer times with the next
+- **Prayer times on Home:** a glass row under the clock with today's five prayers (Subuh, Zuhur,
+  Asar, Magrib, Isya), the next one highlighted and a countdown ("Asar dalam 12 mnt"). The city is resolved
+  from Android's current location; daily schedules come from the [myQuran API](https://api.myquran.com/doc),
+  sourced from Kemenag RI, and are cached on the TV.
+- **Weather and location:** current temperature and conditions from [Open-Meteo](https://open-meteo.com/en/docs),
+  beside the date and city name. The TV's Android location service selects the location while Home is open.
+- **The Islamic screensaver:** a gold clock, the Indonesian and Hijri dates, a card of the prayer times with the next
   one framed in gold, and a verse of the Quran with its translation that changes every 3 minutes. Arabic text in
   the Uthmani script and the translation of the Indonesian Ministry of Religious Affairs (Kemenag RI), via
   quran.com (`launcher/app/src/main/res/raw/ayat.json`).
-- **Mosque photos:** Masjid al-Haram, the Kaaba, the Prophet's Mosque, Quba Mosque and other beautiful mosques
-  (the Crystal Mosque, Putra Mosque, Istanbul, Brunei, Lahore, Jerusalem...) behind the screensaver, changing
-  with the verse, and behind Home in place of the weekly places, each named with its photographer's credit. All
-  from Wikimedia Commons under free licences; the list is [themes/islamik/masjid.json](themes/islamik/masjid.json)
-  and `python3 tools/masjid-photos.py <theme folder>` downloads them. `"masjid_home": false` brings the weekly
-  places back to Home.
+- **Mosque photos:** Home rotates photos from
+  [themes/islamik/masjid.json](themes/islamik/masjid.json) every three minutes. Online Home photos stay in
+  memory rather than local storage; the APK has no bundled offline fallback. The screensaver has its own
+  downloaded photo collection. Photo credits and licence details are included in the list.
 - **The azan:** at every prayer time, on the screensaver or on Home, the azan screen comes up and `azan.mp3` plays
   (`azan-subuh.mp3` for Subuh). **In any other app** (YouTube, Netflix, Live TV) a band slides up across the lower
   third of the screen with the prayer's name, the video underneath pauses and the azan plays. Any button on the
@@ -131,23 +123,29 @@ clears their caches, leaving sign-ins and app data untouched.
 
 ```json
 {
-  "prayer_zone": "TRG04",
+  "auto_location": true,
+  "weather": true,
+  "download_masjid": true,
+  "download_azan": true,
+  "show_network_pill": false,
+  "show_inputs": false,
+  "show_dock_tray": true,
   "azan": true
 }
 ```
 
-Change `TRG04` to your JAKIM zone (for example `WLY01` Kuala Lumpur, `SGR01` Petaling and Gombak, `JHR02` Johor
-Bahru; the full list is on the e-Solat site). [themes/islamik](themes/islamik) comes with an azan (`azan.mp3`, by
+The launcher uses the TV's Android location to select a city automatically. [themes/islamik](themes/islamik)
+comes with an azan (`azan.mp3`, by
 Ustaz Asri Ibrahim of Rabbani) and a Subuh azan (`azan-subuh.mp3`); replace either with a recording of your own,
-keeping the name. Then send it to the TV:
+keeping the name. If either audio file is missing, `download_azan` fetches the default recording and saves it on
+the TV; existing custom files are not replaced. Then send the theme to the TV:
 
 ```bash
-python3 tools/masjid-photos.py <theme folder>      # mosque photos (optional)
 TV_HOST=<tv ip> tools/theme.sh <theme folder>
 ```
 
-Without an audio file the azan screen shows silently for 90 seconds. `"azan": false` turns the azan off;
-removing `prayer_zone` turns all of it off.
+Without an audio file the azan screen shows silently for 90 seconds. `"azan": false` turns the azan off.
+Set `"auto_location": false` to disable location-based prayer times, or `"weather": false` to hide weather.
 
 ## Which TVs work
 
@@ -162,21 +160,27 @@ home screen or the Home button. For the full Clear TV Islamic, plug in a Google 
 Google TV, Xiaomi Mi Box, NVIDIA Shield): the TV becomes the screen and Clear TV Islamic is Home. On LG, a version you
 open as an app is in preview in [webos/](webos/README.md).
 
-## Places, or pictures of your own
+## Custom wallpapers and limited connectivity
 
-Places are on from the start. To change how often the picture changes, or to use your own pictures and keep
-the launcher offline, make a theme folder with a `config.json` like this and push it with `tools/theme.sh`:
+Home's curated mosque photos need an internet connection, and the APK does not include an offline fallback. To use
+local theme pictures behind Home, set `masjid_home` to `false`. You can reduce network use by turning off location,
+weather, screensaver photo downloads, and azan downloads:
 
 ```json
 {
-  "places": false,
-  "wallpaper_seconds": 15,
+  "masjid_home": false,
+  "auto_location": false,
+  "weather": false,
+  "download_masjid": false,
+  "download_azan": false,
   "show_network_pill": false
 }
 ```
 
-All keys are listed in [themes/README.md](themes/README.md). With `"places": false`, the launcher never goes
-online.
+Then include a local `wallpaper.jpg` or `wallpapers/` folder in the theme and send it with `tools/theme.sh`.
+Prayer times and weather refresh when the TV has internet and location access; previously cached data may remain
+available between refreshes. Keep azan enabled with local audio files, or set `azan` to `false` if you do not want
+it in this setup. All keys are listed in [themes/README.md](themes/README.md).
 
 ## Credits and licence
 
@@ -184,10 +188,11 @@ online.
   [LICENSE](LICENSE). Its debloat lists, tools and launcher are the foundation of this project.
 - The Outfit typeface is under the SIL Open Font License (`launcher/FONT-LICENSE-OFL.txt`).
 - The Inputs icon is from Google's Material Icons (Apache 2.0).
-- Pictures of places and their captions are Bing's daily images (Microsoft). The launcher fetches them on your
-  own TV; the promo pictures above show three of them.
+- The Android Home and screensaver mosque photos come from Wikimedia Commons; each photo is credited in
+  [themes/islamik/masjid.json](themes/islamik/masjid.json). The LG webOS preview still uses Bing's daily-place images.
 - Gotham, used in the original promo pictures only, is a Hoefler&Co. typeface and is not part of this repository.
-- Prayer times from JAKIM's [e-Solat](https://www.e-solat.gov.my). Quran text (Uthmani, Hafs) and the Kemenag RI
+- Prayer times from the [myQuran API](https://api.myquran.com/doc), sourced from Kemenag RI. Weather from
+  [Open-Meteo](https://open-meteo.com/en/docs). Quran text (Uthmani, Hafs) and the Kemenag RI
   translation via [quran.com](https://quran.com). Mosque photos from Wikimedia Commons, each credited on screen and
   in [themes/islamik/masjid.json](themes/islamik/masjid.json).
 - The azan recordings in [themes/islamik](themes/islamik): Ustaz Asri Ibrahim (Rabbani), and "Adzan Subuh Merdu".
