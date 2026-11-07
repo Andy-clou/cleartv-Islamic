@@ -16,6 +16,7 @@ import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -58,7 +59,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     }
 
     static final class Entry {
-        static final int APP = 0, HOME_SETTINGS = 1, CARD = 2;
+        static final int APP = 0, CARD = 1;
 
         final int kind;
         final String label;
@@ -123,23 +124,27 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     private final List<String> favourites;
     /** Never shown as tiles (res/values/config.xml, hidden_apps). */
     private final Set<String> hidden;
-    private final boolean showHomeSettings;
+    private final Set<String> configuredHidden;
+    private final Set<String> userHidden;
     /** Calmer motion for weak GPUs (config.xml, reduced_motion): no overshoot, shorter fades. */
     private final boolean reducedMotion;
     private final List<Entry> items = new ArrayList<>();
     /** The order someone arranged the tiles in, by key (see {@link #keyAt}); empty until they do. */
     private final List<String> arranged = new ArrayList<>();
     private static final String ORDER_PREFS = "tiles", ORDER_KEY = "order";
-    /** Rebind payload: only whether the tile's name shows, which depends on being in the dock. */
-    private static final Object DOCK_CHANGED = new Object();
+    private static final String VISIBILITY_PREFS = "app_visibility", HIDDEN_KEY = "hidden_packages";
 
     AppAdapter(Context ctx, TileListener listener, int dockSize, Config cfg) {
         this.ctx = ctx;
         this.listener = listener;
         this.dockSize = dockSize;
         this.favourites = cfg.dockApps;
-        this.hidden = new HashSet<>(cfg.hiddenApps);
-        this.showHomeSettings = cfg.showHomeSettingsShortcut;
+        this.configuredHidden = new HashSet<>(cfg.hiddenApps);
+        Set<String> savedHidden = ctx.getSharedPreferences(VISIBILITY_PREFS, Context.MODE_PRIVATE)
+                .getStringSet(HIDDEN_KEY, Collections.emptySet());
+        this.userHidden = new HashSet<>(savedHidden);
+        this.hidden = new HashSet<>(configuredHidden);
+        this.hidden.addAll(userHidden);
         this.reducedMotion = cfg.reducedMotion;
         // Tiles keep their identity across reload(), so a focused tile stays on its app instead of
         // its view being rebound to whatever app now sits in that slot.
@@ -155,8 +160,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     /** What the tiles were last built from; the same list next time means there is nothing to redo. */
     private String builtFrom;
     /**
-     * The app tiles of the last build, by component and install path: a rebuild (one app updated,
-     * installed or removed) loads only what changed, and the rest keep their artwork and sampled glow.
+     * The app tiles of the last build, by component and package update time: a rebuild (one app
+     * updated, installed or removed) loads only what changed, and the rest keep their artwork and
+     * sampled glow.
      */
     private Map<String, Entry> builtApps = new HashMap<>();
 
@@ -185,13 +191,23 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 listed.add(pkg);
             }
         }
-        // The install path moves when an app is updated, so it stands in for the version: an update
-        // that brought a new banner still gets a rebuild.
+        // Android often keeps the same install path across app updates, so include lastUpdateTime
+        // to refresh artwork when an app is upgraded in place. Cache it per package because an app
+        // can expose more than one launchable activity.
         List<String> parts = new ArrayList<>();
+        Map<String, Long> updateTimes = new HashMap<>();
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
-            parts.add(ri.activityInfo.packageName + '/' + ri.activityInfo.name + '@'
-                    + ri.activityInfo.applicationInfo.sourceDir);
+            String pkg = ri.activityInfo.packageName;
+            long updated = updateTimes.computeIfAbsent(pkg, name -> {
+                try {
+                    return pm.getPackageInfo(name, 0).lastUpdateTime;
+                } catch (PackageManager.NameNotFoundException e) {
+                    return 0L;
+                }
+            });
+            parts.add(pkg + '/' + ri.activityInfo.name + '@'
+                    + ri.activityInfo.applicationInfo.sourceDir + ':' + updated);
         }
         for (Cards.Card c : cards) {
             parts.add('#' + c.pkg + '/' + c.component.flattenToShortString() + '|' + c.label + '|'
@@ -212,7 +228,9 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             ComponentName component = new ComponentName(pkg, ri.activityInfo.name);
             Cards.Card card = cardByPkg.get(pkg);
             if (card != null && !card.component.equals(component)) continue;   // the card stands in for this tile
-            String key = component.flattenToShortString() + '@' + ri.activityInfo.applicationInfo.sourceDir;
+            long updated = updateTimes.getOrDefault(pkg, 0L);
+            String key = component.flattenToShortString() + '@' + ri.activityInfo.applicationInfo.sourceDir
+                    + ':' + updated;
             Entry built = card == null ? builtApps.get(key) : null;
             if (built != null) {
                 fresh.add(built);
@@ -254,13 +272,6 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             if (ca != cb) return ca ? -1 : 1;
             return a.label.compareToIgnoreCase(b.label);
         });
-        // Optional "Default home" tile (config.xml), only when this TV actually has a home-screen picker.
-        if (showHomeSettings
-                && pm.resolveActivity(new Intent(Settings.ACTION_HOME_SETTINGS), 0) != null) {
-            fresh.add(new Entry(Entry.HOME_SETTINGS, ctx.getString(R.string.home_settings),
-                    new ComponentName(ctx, HomeSettingsActivity.class), null,
-                    ctx.getDrawable(R.drawable.ic_home_settings), null, 0));
-        }
         items.clear();
         items.addAll(fresh);
         notifyDataSetChanged();
@@ -289,7 +300,13 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         float density = parent.getResources().getDisplayMetrics().density;
         int width = parent.getWidth() > 0 ? parent.getWidth() : parent.getMeasuredWidth();
         int inner = width - parent.getPaddingLeft() - parent.getPaddingRight();
+        if (inner <= 0) inner = Math.max(0, ctx.getResources().getDisplayMetrics().widthPixels - Math.round(110 * density));
         int w = tileWidthPx(inner, dockSize, density), h = tileHeightPx(w);
+        // The horizontal carousel keeps the same four-slot spacing as the old grid. A match-parent
+        // item would otherwise occupy the whole screen and show only one app at a time.
+        ViewGroup.LayoutParams itemLp = v.getLayoutParams();
+        itemLp.width = Math.max(w, inner / Math.max(1, dockSize));
+        v.setLayoutParams(itemLp);
         View card = v.findViewById(R.id.card);
         ViewGroup.LayoutParams cardLp = card.getLayoutParams();
         cardLp.width = w;
@@ -307,7 +324,7 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
     public void onBindViewHolder(@NonNull Holder h, int position) {
         Entry e = items.get(position);
         h.name.setText(e.name);
-        h.name.setVisibility(position < dockSize ? View.INVISIBLE : View.VISIBLE);   // the dock has no labels
+        h.name.setVisibility(View.VISIBLE);
         boolean focused = h.card.isFocused();   // a rebind after reload() can hit the focused tile
         h.name.setAlpha(focused ? 1f : 0f);
         h.card.setScaleX(focused ? FOCUS_SCALE : 1f);
@@ -316,15 +333,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
             h.banner.setImageDrawable(e.banner);
             h.banner.setVisibility(View.VISIBLE);
             h.icon.setVisibility(View.GONE);
-            h.label.setVisibility(View.GONE);
+            h.label.setText(e.label);
         } else {
             h.banner.setImageDrawable(null);
             h.banner.setVisibility(View.GONE);
             h.icon.setImageDrawable(e.icon);
             h.icon.setVisibility(View.VISIBLE);
             h.label.setText(e.label);
-            h.label.setVisibility(View.VISIBLE);
         }
+        updateNamePlacement(h, position, focused);
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
             int pos = h.getBindingAdapterPosition();
@@ -334,13 +351,18 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         });
     }
 
-    @Override
-    public void onBindViewHolder(@NonNull Holder h, int position, @NonNull List<Object> payloads) {
-        if (payloads.size() == 1 && payloads.get(0) == DOCK_CHANGED) {
-            h.name.setVisibility(position < dockSize ? View.INVISIBLE : View.VISIBLE);
-            return;
-        }
-        onBindViewHolder(h, position);
+    /** Show each app name at the top of its tile only while focused; hide the lower name. */
+    private static void updateNamePlacement(Holder h, int position, boolean focused) {
+        h.name.setVisibility(View.GONE);
+        h.label.setVisibility(focused ? View.VISIBLE : View.GONE);
+        android.widget.FrameLayout.LayoutParams lp = (android.widget.FrameLayout.LayoutParams) h.label.getLayoutParams();
+        lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        lp.height = Math.round(30 * h.card.getResources().getDisplayMetrics().density);
+        h.label.setLayoutParams(lp);
+        h.label.setGravity(Gravity.CENTER);
+        int density = Math.round(h.card.getResources().getDisplayMetrics().density);
+        h.label.setPadding(10 * density, 0, 10 * density, 0);
+        h.label.setBackgroundColor(0xAA000000);
     }
 
     /** Android's page for the app at {@code position}: storage, permissions, uninstall. */
@@ -357,16 +379,70 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         }
     }
 
-    /** Whether the tile at {@code position} can be moved: every app can, the Default home tile cannot. */
+    /** Whether the tile at {@code position} can be moved. */
     boolean canMove(int position) {
-        return position >= 0 && position < items.size() && items.get(position).kind != Entry.HOME_SETTINGS;
+        return position >= 0 && position < items.size();
     }
 
-    /** The last position a moved tile can take: before the Default home tile, which stays last. */
+    /** The last position a moved tile can take. */
     int lastMovable() {
-        int last = items.size() - 1;
-        while (last >= 0 && items.get(last).kind == Entry.HOME_SETTINGS) last--;
-        return last;
+        return items.size() - 1;
+    }
+
+    boolean canHide(int position) {
+        return items.size() > 1 && position >= 0 && position < items.size()
+                && !hidden.contains(items.get(position).pkg);
+    }
+
+    String packageAt(int position) {
+        return position >= 0 && position < items.size() ? items.get(position).pkg : null;
+    }
+
+    boolean hidePackage(String pkg) {
+        if (pkg == null || pkg.equals(ctx.getPackageName()) || configuredHidden.contains(pkg)
+                || userHidden.contains(pkg) || items.size() <= 1) return false;
+        boolean shown = false;
+        for (Entry item : items) if (item.pkg.equals(pkg)) { shown = true; break; }
+        if (!shown) return false;
+        userHidden.add(pkg);
+        hidden.add(pkg);
+        saveUserHidden();
+        builtFrom = null;
+        return true;
+    }
+
+    boolean showPackage(String pkg) {
+        if (!userHidden.remove(pkg)) return false;
+        hidden.clear();
+        hidden.addAll(configuredHidden);
+        hidden.addAll(userHidden);
+        saveUserHidden();
+        builtFrom = null;
+        return true;
+    }
+
+    List<String> userHiddenPackages() {
+        List<String> out = new ArrayList<>(userHidden);
+        Collections.sort(out, String.CASE_INSENSITIVE_ORDER);
+        return out;
+    }
+
+    Set<String> hiddenPackages() {
+        return new HashSet<>(hidden);
+    }
+
+    String labelForPackage(String pkg) {
+        try {
+            return String.valueOf(ctx.getPackageManager().getApplicationLabel(
+                    ctx.getPackageManager().getApplicationInfo(pkg, 0)));
+        } catch (PackageManager.NameNotFoundException e) {
+            return pkg;
+        }
+    }
+
+    private void saveUserHidden() {
+        ctx.getSharedPreferences(VISIBILITY_PREFS, Context.MODE_PRIVATE).edit()
+                .putStringSet(HIDDEN_KEY, new HashSet<>(userHidden)).apply();
     }
 
     /**
@@ -378,11 +454,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
         Entry e = items.remove(from);
         items.add(to, e);
         notifyItemMoved(from, to);
-        // A tile crossing into or out of the dock shows or hides its name.
-        int lo = Math.min(from, to), hi = Math.max(from, to);
-        if (lo < dockSize && hi >= dockSize) notifyItemRangeChanged(lo, hi - lo + 1, DOCK_CHANGED);
         arranged.clear();
-        for (Entry x : items) if (x.kind != Entry.HOME_SETTINGS) arranged.add(x.component.flattenToShortString());
+        for (Entry x : items) arranged.add(x.component.flattenToShortString());
         ctx.getSharedPreferences(ORDER_PREFS, Context.MODE_PRIVATE).edit()
                 .putString(ORDER_KEY, android.text.TextUtils.join("\n", arranged)).apply();
         return true;
@@ -390,11 +463,6 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
 
     /** Opens the tile's activity by explicit component, with no extras: a card can name nothing else. */
     private void launch(Entry e) {
-        if (e.kind == Entry.HOME_SETTINGS) {
-            ctx.startActivity(new Intent(ctx, HomeSettingsActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            return;
-        }
         Intent i = new Intent(Intent.ACTION_MAIN)
                 .addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER)
                 .setComponent(e.component)
@@ -528,6 +596,8 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                 float s = focused ? FOCUS_SCALE : 1.0f;
                 view.animate().cancel();
                 name.animate().cancel();
+                int pos = getBindingAdapterPosition();
+                updateNamePlacement(this, pos, focused);
                 if (reducedMotion) {
                     // No overshoot: the extra frames redraw the banner and the dock band on a weak GPU.
                     view.animate().scaleX(s).scaleY(s)
@@ -535,18 +605,15 @@ public class AppAdapter extends RecyclerView.Adapter<AppAdapter.Holder> {
                             .setInterpolator(ZOOM_REDUCED)
                             .withLayer()
                             .start();
-                    name.animate().alpha(focused ? 1f : 0f).setDuration(100).start();
+                    name.setAlpha(0f);
                 } else {
                     view.animate().scaleX(s).scaleY(s)
                             .setDuration(focused ? 260 : 180)
                             .setInterpolator(focused ? ZOOM_IN : ZOOM_OUT)
                             .withLayer()
                             .start();
-                    name.animate().alpha(focused ? 1f : 0f)
-                            .translationY(focused ? density * 4f : -density * 6f)
-                            .setDuration(220).start();
+                    name.setAlpha(0f);
                 }
-                int pos = getBindingAdapterPosition();
                 if (focused && listener != null && pos != RecyclerView.NO_POSITION) {
                     listener.onTileFocused(pos, view);
                 }

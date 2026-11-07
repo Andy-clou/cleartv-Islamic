@@ -1,7 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A slim, blue home outline inside the same soft circular ring as the reference icon. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp" android:height="48dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M12,3L2,12H5V21H10V15H14V21H19V12H22Z" />
+    android:width="34dp"
+    android:height="34dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#71869D"
+        android:strokeAlpha="0.78"
+        android:strokeWidth="2.2"
+        android:pathData="M24,3.8 A20.2,20.2 0,0 1,24 44.2 A20.2,20.2 0,0 1,24 3.8" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#63D8F2"
+        android:strokeWidth="2.7"
+        android:strokeLineCap="square"
+        android:strokeLineJoin="miter"
+        android:pathData="M16.8,27.4 L24,20.6 L31.2,27.4 L31.2,36.8 L16.8,36.8 Z" />
 </vector>

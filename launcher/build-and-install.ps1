@@ -1,6 +1,5 @@
 # Windows version of build-and-install.sh: build the launcher APK and install it on the TV as the
-# default home screen. Uses Android Studio's bundled JDK and the default SDK location unless
-# JAVA_HOME / ANDROID_HOME are set.
+# default home screen. The build uses build-release.ps1 for the local JDK/SDK paths.
 #
 # Usage: launcher\build-and-install.ps1 -TvHost 192.168.1.50 [-StockLauncher <package>|none]
 #        [-Apk <file>]        install that APK instead of building one (no JDK or Android SDK needed)
@@ -27,19 +26,8 @@ Set-Location $PSScriptRoot
 if ($Apk) {
     Write-Host "Installing $Apk (no build)"
 } else {
-if (-not $env:JAVA_HOME -or -not (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
-    $jbr = Get-ChildItem 'C:\Program Files\Android' -Directory -ErrorAction SilentlyContinue |
-        ForEach-Object { Join-Path $_.FullName 'jbr' } | Where-Object { Test-Path "$_\bin\java.exe" } | Select-Object -First 1
-    if (-not $jbr) { throw 'Set JAVA_HOME to a JDK 17+ (Android Studio ships one in its jbr folder)' }
-    $env:JAVA_HOME = $jbr
-}
-$sdk = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { "$env:LOCALAPPDATA\Android\Sdk" }
-if (-not (Test-Path local.properties)) {
-    "sdk.dir=$($sdk -replace '\\', '\\')" | Out-File -Encoding ascii local.properties
-}
-
-.\gradlew.bat assembleRelease -q --console=plain
-if ($LASTEXITCODE -ne 0) { throw 'Gradle build failed' }
+    & "$PSScriptRoot\build-release.ps1"
+    if ($LASTEXITCODE -ne 0) { throw 'Gradle build failed' }
 }
 
 $py = '..\tools\venv\Scripts\python.exe'
@@ -112,7 +100,7 @@ Write-Host $out
 if ("$out" -notmatch 'Success') { throw 'pm install failed; the stock launcher was left untouched' }
 try {
     @(
-        'pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted',
+        'pm grant com.gathin.tvhome android.permission.ACCESS_COARSE_LOCATION 2>/dev/null; pm grant com.gathin.tvhome android.permission.ACCESS_FINE_LOCATION 2>/dev/null; echo location-granted',
         'appops set com.gathin.tvhome SYSTEM_ALERT_WINDOW allow 2>/dev/null; echo azan-over-apps-allowed',
         'cmd package compile -m speed -f com.gathin.tvhome',
         "am start -W -n com.gathin.tvhome/.MainActivity | grep -E '^(Status|Error)'"

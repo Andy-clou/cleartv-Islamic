@@ -36,7 +36,7 @@ else
   tv "rm -f $DIR/wallpaper.jpg" >/dev/null
 fi
 # A wallpapers/ folder is a rotation: the launcher shows one picture after another (wallpaper_minutes).
-# The azan's sound (prayer_zone): azan.mp3, and azan-subuh.mp3 for Subuh.
+# Optional azan audio files: azan.mp3 and azan-subuh.mp3 for Subuh.
 for f in azan.mp3 azan-subuh.mp3; do
   if [ -f "$THEME/$f" ]; then
     "$PY" -I b64push.py "$THEME/$f" "$DIR/$f" | tail -n 1

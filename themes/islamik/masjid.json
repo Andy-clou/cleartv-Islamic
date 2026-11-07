@@ -1,15 +1,15 @@
 {
- "about": "Gambar masjid untuk screensaver Islamik, dari Wikimedia Commons. tools/masjid-photos.py memuat turunnya ke folder masjid/ dalam theme.",
+ "about": "Foto masjid untuk Home dan screensaver Islami dari Wikimedia Commons. Launcher mengambilnya dari daftar ini.",
  "photos": [
   {
-   "commons": "Edited_Great_Mosque_of_Mecca1_5-2019-ccsa4.0_(cropped).jpg",
-   "caption": "Masjidil Haram, Mekah",
+   "commons": "Edited Great Mosque of Mecca1 5-2019-ccsa4.0.jpg",
+   "caption": "Masjidil Haram, Makkah",
    "author": "Saudipics.com",
    "license": "CC BY-SA 4.0"
   },
   {
-   "commons": "The_Kaaba_during_Hajj_-_edited.jpg",
-   "caption": "Kaabah, Mekah",
+   "commons": "The Kaaba during Hajj - edited.jpg",
+   "caption": "Ka'bah, Makkah",
    "author": "Adli Wahid, suntingan Basile Morin",
    "license": "CC BY-SA 4.0"
   },
@@ -38,21 +38,21 @@
    "license": "CC BY 2.0"
   },
   {
-   "commons": "Masjid_Putra,_Putrajaya,_Malaysia.jpg",
+   "commons": "MasjidPutra.jpg",
    "caption": "Masjid Putra, Putrajaya",
    "author": "Wikimedia Commons",
    "license": "CC BY 4.0"
   },
   {
    "commons": "Jame'Asr_Hassanil_Bolkiah_Mosque_(18404307540).jpg",
-   "caption": "Masjid Jame' Asr Hassanil Bolkiah, Brunei",
+   "caption": "Masjid Jame' Asr Hassanil Bolkiah, Brunei Darussalam",
    "author": "Jorge Láscar",
    "license": "CC BY 2.0"
   },
   {
-   "commons": "Sultan_Ahmed_Mosque_2022_2.jpg",
-   "caption": "Masjid Sultan Ahmed, Istanbul",
-   "author": "kallerna",
+   "commons": "KotaKinabalu Sabah CityMosque-00.jpg",
+   "caption": "Kota Kinabalu, Sabah",
+   "author": "CEphoto, Uwe Aranas",
    "license": "CC BY-SA 4.0"
   },
   {
@@ -62,14 +62,14 @@
    "license": "CC BY-SA 4.0"
   },
   {
-   "commons": "Badshahi_Mosque_front_picture.jpg",
-   "caption": "Masjid Badshahi, Lahore",
-   "author": "Romero Maia",
+   "commons": "Sultan Omar Ali Saifuddin Mosque 02.jpg",
+   "caption": "Masjid Sultan Omar Ali Saifuddin,  Brunei",
+   "author": "sam garza",
    "license": "CC BY-SA 4.0"
   },
   {
    "commons": "Jerusalem_DomeoftheRock_J65_(cropped).JPG",
-   "caption": "Kubah As-Sakhrah, Baitulmaqdis",
+   "caption": "Kubah As-Sakhrah, Yerusalem",
    "author": "Ludvig14",
    "license": "CC BY-SA 4.0"
   },
@@ -77,6 +77,18 @@
    "commons": "Nasir_ol_Molk_Mosque_(31233739431).jpg",
    "caption": "Masjid Nasir al-Mulk, Shiraz",
    "author": "Matt Biddulph",
+   "license": "CC BY-SA 2.0"
+   },
+  {
+   "commons": "Masjid-nabawi.jpg",
+   "caption": "Masjid Nabawi, Madinah",
+   "author": "Muslim LK",
+   "license": "CC BY-SA 2.0"
+   },
+  {
+   "commons": "Photo of Abdülhamid II Mosque.jpg",
+   "caption": "Masjid Abdülhamid II , Djibouti",
+   "author": "Skilla1st",
    "license": "CC BY-SA 2.0"
   }
  ]

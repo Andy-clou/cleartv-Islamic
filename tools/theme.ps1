@@ -42,7 +42,7 @@ if (Test-Path $masjid) {
         & $py -I b64push.py $_.FullName "$dir/masjid/$($_.Name)"
     }
 }
-# The azan's sound (prayer_zone): azan.mp3, and azan-subuh.mp3 for Subuh.
+# Optional azan audio files: azan.mp3 and azan-subuh.mp3 for Subuh.
 foreach ($f in 'azan.mp3', 'azan-subuh.mp3') {
     $src = Join-Path $Theme $f
     if (Test-Path $src) { & $py -I b64push.py $src "$dir/$f" } else { & $py -I tv.py "rm -f $dir/$f" | Out-Null }

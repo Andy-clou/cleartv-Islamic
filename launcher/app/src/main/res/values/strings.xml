@@ -18,8 +18,11 @@
     <string name="dream_name">Clock</string>
     <string name="vpn">VPN</string>
     <string name="vpn_off">VPN off</string>
-    <string name="home_settings">Default home</string>
-    <string name="home_settings_help">Choose a home screen in system settings, then press Home.</string>
+    <string name="home_settings">Set default launcher</string>
+    <string name="home_settings_help">Choose Clear TV Islamic as the Home app in system settings, then press Home.</string>
+    <string name="home_settings_applied">Clear TV Islamic is now the default Home app.</string>
+    <string name="home_settings_cancelled">The default Home app was not changed.</string>
+    <string name="home_settings_already_default">Clear TV Islamic is already the default Home app.</string>
     <string name="input_key_service_description">Opens the input switcher when the remote\'s Input button is pressed.</string>
     <string name="home_key_name">Home button</string>
     <string name="home_key_description">Makes the remote\'s Home button open this launcher.</string>
@@ -43,5 +46,11 @@
     <string name="card_state_new_key">New key</string>
     <string name="card_state_new_label">New name</string>
     <string name="tile_move">Move</string>
+    <string name="tile_hide_app">Hide app</string>
     <string name="tile_app_info">App info</string>
+    <string name="hidden_apps">Hidden apps</string>
+    <string name="show_hidden_app">Show %1$s</string>
+    <string name="no_hidden_apps">No apps hidden</string>
+    <string name="app_hidden">%1$s hidden</string>
+    <string name="app_shown">%1$s shown</string>
 </resources>

@@ -32,7 +32,8 @@ final class AzanAlarm {
         PendingIntent pi = PendingIntent.getBroadcast(ctx, 0, new Intent(ACTION).setClass(ctx, Receiver.class),
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Config cfg = Config.load(ctx);
-        long at = cfg.azan && cfg.azanOverlay ? next(ctx, cfg.prayerZone) : -1;
+        PrayerTimes.City city = PrayerTimes.currentCity(ctx);
+        long at = cfg.azan && cfg.azanOverlay && city != null ? next(ctx, city.id) : -1;
         if (at < 0) {
             am.cancel(pi);
             return;

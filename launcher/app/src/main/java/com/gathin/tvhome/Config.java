@@ -47,11 +47,16 @@ final class Config {
     /** Calmer motion for weak GPUs (config.xml, reduced_motion): stiff spring, short fades, no replay. */
     final boolean reducedMotion;
     final String vpnApp;
+    /** Show the Home-role chooser icon in the top bar. */
     final boolean showHomeSettingsShortcut;
     /** The Wi-Fi / Ethernet pill in the top bar (config.xml, show_network_pill). */
     final boolean showNetworkPill;
+    /** The Inputs pill in the top bar (config.xml, show_inputs). */
+    final boolean showInputs;
     /** The Live TV row in the Inputs menu (config.xml, show_live_tv). */
     final boolean showLiveTv;
+    /** Draw the glass tray behind the pinned application row. */
+    final boolean showDockTray;
     /** Background colour behind everything, #RRGGBB; black unless a theme says otherwise. */
     final int backgroundColor;
     /** Full-screen picture behind the launcher, or null for the plain colour. */
@@ -60,15 +65,21 @@ final class Config {
     final List<File> wallpapers;
     /** Time between wallpaper changes (wallpaper_seconds, else wallpaper_minutes); 0 changes only when Home starts. */
     final long wallpaperIntervalMs;
-    /** Pictures of places to visit, renewed weekly (see PlaceWallpapers); "places": false keeps them off. */
+    /** Legacy Bing places switch, retained for older theme files. */
     final boolean places;
     /** Days between clearing the TV's app caches (see CacheCleaner); 0 never does. */
     final int cacheCleanDays;
-    /** JAKIM e-Solat zone for the prayer times under the clock ("TRG04"); empty hides them. */
-    final String prayerZone;
-    /** The azan screen (and azan.mp3, if the theme has one) at each prayer time; needs prayerZone. */
+    /** Follow Android's current location to choose the prayer city and weather coordinates. */
+    final boolean autoLocation;
+    /** Show current weather beside the date. */
+    final boolean weather;
+    /** Download the Islamic theme's mosque photos to local storage for the screensaver. */
+    final boolean downloadMasjid;
+    /** Download the default azan audio to local storage when a theme has no audio files. */
+    final boolean downloadAzan;
+    /** The azan screen (and azan.mp3, if the theme has one) at each prayer time. */
     final boolean azan;
-    /** The theme's mosque photos (Masjid) behind Home instead of the week's places, when it has them. */
+    /** Use the curated online mosque list behind Home; false selects local theme wallpapers. */
     final boolean masjidHome;
     /** The azan over other apps too (AzanOverlay), as a band across the bottom of the screen. */
     final boolean azanOverlay;
@@ -79,10 +90,13 @@ final class Config {
                    String sourcePanelService, String sourcePanelAction, String inputAction,
                    int columns, int rowsBelowDock,
                    boolean shamsiDate, boolean moduleCards, boolean reducedMotion, String vpnApp,
-                   boolean showHomeSettingsShortcut, boolean showNetworkPill, boolean showLiveTv,
+                   boolean showHomeSettingsShortcut, boolean showNetworkPill, boolean showInputs,
+                   boolean showDockTray, boolean showLiveTv,
                    int backgroundColor,
                    File wallpaper, List<File> wallpapers, long wallpaperIntervalMs,
-                   boolean places, int cacheCleanDays, String prayerZone, boolean azan, boolean masjidHome, boolean azanOverlay, boolean overlayApplied) {
+                   boolean places, int cacheCleanDays, boolean autoLocation, boolean weather, boolean downloadMasjid,
+                   boolean downloadAzan,
+                   boolean azan, boolean masjidHome, boolean azanOverlay, boolean overlayApplied) {
         this.dockApps = Collections.unmodifiableList(dockApps);
         this.hiddenApps = Collections.unmodifiableList(hiddenApps);
         this.liveTvPackage = liveTvPackage;
@@ -98,6 +112,8 @@ final class Config {
         this.vpnApp = vpnApp;
         this.showHomeSettingsShortcut = showHomeSettingsShortcut;
         this.showNetworkPill = showNetworkPill;
+        this.showInputs = showInputs;
+        this.showDockTray = showDockTray;
         this.showLiveTv = showLiveTv;
         this.backgroundColor = backgroundColor;
         this.wallpaper = wallpaper;
@@ -105,7 +121,10 @@ final class Config {
         this.wallpaperIntervalMs = wallpaperIntervalMs;
         this.places = places;
         this.cacheCleanDays = cacheCleanDays;
-        this.prayerZone = prayerZone;
+        this.autoLocation = autoLocation;
+        this.weather = weather;
+        this.downloadMasjid = downloadMasjid;
+        this.downloadAzan = downloadAzan;
         this.azan = azan;
         this.masjidHome = masjidHome;
         this.azanOverlay = azanOverlay;
@@ -134,8 +153,13 @@ final class Config {
         String vpn = res.getString(R.string.vpn_app).trim();
         boolean homeSettings = res.getBoolean(R.bool.show_home_settings_shortcut);
         boolean networkPill = res.getBoolean(R.bool.show_network_pill);
+        boolean showInputs = res.getBoolean(R.bool.show_inputs);
+        boolean showDockTray = res.getBoolean(R.bool.show_dock_tray);
         boolean liveTvRow = res.getBoolean(R.bool.show_live_tv);
-        String prayerZone = res.getString(R.string.prayer_zone).trim();
+        boolean autoLocation = res.getBoolean(R.bool.auto_location);
+        boolean weather = res.getBoolean(R.bool.weather);
+        boolean downloadMasjid = res.getBoolean(R.bool.download_masjid);
+        boolean downloadAzan = res.getBoolean(R.bool.download_azan);
         boolean azan = res.getBoolean(R.bool.azan);
         boolean masjidHome = true;
         boolean azanOverlay = true;
@@ -162,8 +186,13 @@ final class Config {
             vpn = string(json, "vpn_app", vpn);
             homeSettings = bool(json, "show_home_settings_shortcut", homeSettings);
             networkPill = bool(json, "show_network_pill", networkPill);
+            showInputs = bool(json, "show_inputs", showInputs);
+            showDockTray = bool(json, "show_dock_tray", showDockTray);
             liveTvRow = bool(json, "show_live_tv", liveTvRow);
-            prayerZone = string(json, "prayer_zone", prayerZone);
+            autoLocation = bool(json, "auto_location", autoLocation);
+            weather = bool(json, "weather", weather);
+            downloadMasjid = bool(json, "download_masjid", downloadMasjid);
+            downloadAzan = bool(json, "download_azan", downloadAzan);
             azan = bool(json, "azan", azan);
             masjidHome = bool(json, "masjid_home", masjidHome);
             azanOverlay = bool(json, "azan_over_apps", azanOverlay);
@@ -183,7 +212,7 @@ final class Config {
             }
             Collections.sort(wallpapers);
         }
-        int wallpaperMinutes = json != null ? integer(json, "wallpaper_minutes", 30, 0, 1440) : 30;
+        int wallpaperMinutes = json != null ? integer(json, "wallpaper_minutes", 10, 0, 1440) : 10;
         int wallpaperSeconds = json != null ? integer(json, "wallpaper_seconds", 0, 5, 86400) : 0;
         long wallpaperIntervalMs = wallpaperSeconds > 0 ? wallpaperSeconds * 1000L : wallpaperMinutes * 60_000L;
         // On unless a theme says otherwise: a fresh install shows places with nothing to set up.
@@ -193,8 +222,10 @@ final class Config {
 
         return new Config(dock, hidden, liveTv, liveTvAction, panelService, panelAction, inputAction,
                 Math.max(1, columns), Math.max(0, rowsBelow), shamsi, moduleCards, reducedMotion,
-                vpn, homeSettings, networkPill, liveTvRow, background, wallpaper, wallpapers, wallpaperIntervalMs,
-                places, cacheCleanDays, prayerZone.toUpperCase(java.util.Locale.ROOT), azan, masjidHome, azanOverlay, applied);
+                vpn, homeSettings, networkPill, showInputs, showDockTray, liveTvRow,
+                background, wallpaper, wallpapers, wallpaperIntervalMs,
+                places, cacheCleanDays, autoLocation, weather, downloadMasjid, downloadAzan,
+                azan, masjidHome, azanOverlay, applied);
     }
 
     /** Reads and parses the overlay; any problem means "no overlay", never a crash on the home screen. */

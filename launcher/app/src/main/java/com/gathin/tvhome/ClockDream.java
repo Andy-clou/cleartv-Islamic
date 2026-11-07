@@ -21,7 +21,7 @@ import java.util.Random;
  * It sits in the middle of the screen and every minute shifts a few pixels around the centre, so
  * nothing burns in while it still reads as centred. No network, no images: cheap enough for a 1 GB TV.
  *
- * <p>With a prayer_zone in the theme it shows {@link IslamicDream} instead: the time, prayer times and
+ * <p>Once Android location resolves an Indonesian city it shows {@link IslamicDream} instead: the time, prayer times and
  * a verse of the Quran over a lattice of eight-pointed stars.
  *
  * <p>Everything is sized from the screen's height, in the units the design was drawn in: a screen
@@ -36,24 +36,24 @@ public class ClockDream extends DreamService {
     private final Random random = new Random();
     private View content;
     private ClockFace face;
-    /** The Islamic face (IslamicDream), shown instead of the analog clock when a theme sets prayer_zone. */
+    /** The Islamic face (IslamicDream), shown instead of the analog clock after a city is resolved. */
     private IslamicDream islamic;
-    /** The azan at prayer times (Azan), or null when the theme has no prayer_zone or turns it off. */
+    /** The azan at prayer times (Azan), or null when the theme turns it off. */
     private Azan azan;
-    private String prayerZone;
+    private String prayerCityId;
     private boolean reducedMotion;
     private static final long AZAN_CHECK_MS = 20_000L;
     private final Runnable azanCheck = new Runnable() {
         @Override
         public void run() {
-            int due = Azan.takeDue(ClockDream.this, prayerZone);
+            int due = Azan.takeDue(ClockDream.this, prayerCityId);
             if (due >= 0) {
                 // The clock steps aside and the screen comes up to full brightness for the azan.
                 handler.removeCallbacks(tick);
                 content.animate().cancel();
                 content.animate().alpha(0f).setDuration(800).start();
                 setScreenBright(true);
-                azan.start(ClockDream.this, prayerZone, due, reducedMotion);
+                azan.start(ClockDream.this, prayerCityId, due, reducedMotion);
             }
             handler.postDelayed(this, AZAN_CHECK_MS);
         }
@@ -74,16 +74,17 @@ public class ClockDream extends DreamService {
         setFullscreen(true);
         setScreenBright(false);
         Config cfg = Config.load(this);
-        if (!cfg.prayerZone.isEmpty()) {
+        PrayerTimes.City city = PrayerTimes.currentCity(this);
+        if (city != null) {
             setContentView(R.layout.dream_islamic);
-            islamic = new IslamicDream(this, cfg.prayerZone);
+            islamic = new IslamicDream(this, city.id);
             content = islamic.content;
         } else {
             setContentView(R.layout.dream_clock);
             content = findViewById(R.id.dreamContent);
         }
-        if (cfg.azan && !cfg.prayerZone.isEmpty()) {
-            prayerZone = cfg.prayerZone;
+        if (cfg.azan && city != null) {
+            prayerCityId = city.id;
             reducedMotion = cfg.reducedMotion;
             azan = new Azan((ViewGroup) content.getParent(), () -> {
                 setScreenBright(false);

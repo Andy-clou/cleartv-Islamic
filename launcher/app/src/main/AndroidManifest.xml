@@ -6,11 +6,12 @@
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
     <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 
-    <!-- Only for the weekly pictures of places (PlaceWallpapers); "places": false keeps the launcher offline. -->
+    <!-- Prayer times, weather and wallpaper data; each network feature can be switched off in the theme. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <!-- Needed on Android 10 to read the Wi-Fi network name; granted over adb at install time. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Used for automatic local weather and Indonesian city-based prayer times; granted over adb at install time. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- The azan over other apps (AzanAlarm, AzanOverlay): woken at each prayer time, a band over the app
          in front, and the azan playing for its length. "Display over other apps" is granted over adb at
@@ -106,7 +107,7 @@
         <!-- The azan over other apps: the alarm at each prayer time (also set again at boot), and the band. -->
         <receiver
             android:name=".AzanAlarm$Receiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />

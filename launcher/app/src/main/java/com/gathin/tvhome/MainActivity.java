@@ -8,6 +8,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.pm.ApplicationInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -21,6 +22,11 @@ import android.graphics.drawable.ColorDrawable;
 import android.media.tv.TvContract;
 import android.media.tv.TvInputInfo;
 import android.media.tv.TvInputManager;
+import android.media.AudioAttributes;
+import android.media.SoundPool;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -57,7 +63,8 @@ import androidx.dynamicanimation.animation.DynamicAnimation;
 import androidx.dynamicanimation.animation.FloatPropertyCompat;
 import androidx.dynamicanimation.animation.SpringAnimation;
 import androidx.dynamicanimation.animation.SpringForce;
-import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
 
 import java.io.File;
@@ -74,9 +81,10 @@ import java.util.Set;
  */
 public class MainActivity extends Activity implements AppAdapter.TileListener {
 
-    /** Tiles per row and dock slots (res/values/config.xml, columns). Set in onCreate. */
+    /** Number of visible app slots and pinned favourites (res/values/config.xml, columns). */
     static int COLUMNS = 4;
     private static final long MINUTE_MS = 60_000L;
+    private static final long HOME_INTERNET_WALLPAPER_INTERVAL_MS = 3L * 60_000L;
     private String liveTvPkg;
     private String liveTvAction;
     private String inputAction;
@@ -93,26 +101,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Whether the glider is on the top menu, so a move down travels dark. */
     private boolean gliderOnPill;
     private final int[] pillAt = new int[2], rootAt = new int[2];
-    /** The top-right buttons and the two rectangles used to line them up with the dock. */
-    private View topRow, topSettings;
-    private final Rect alignCard = new Rect(), alignButton = new Rect();
-    /** How much of the space between the side paddings the top shelf may use. */
-    private static final float HERO_WIDTH_SHARE = 0.40f;
-    /** The name is one line, and may run wider than the description, up to this share. */
+    /** The one-line place name may use up to this share of the screen. */
     private static final float HERO_NAME_WIDTH_SHARE = 0.60f;
     private static final float HERO_TITLE_MAX_SP = 40f;
     /** The breathing room between the shelf's last line and the top of the app container. */
     private static final float HERO_GAP_DP = 67f;
     private static final float HERO_TITLE_MIN_SP = 26f;
     /** The shelf's width in pixels, worked out once from the screen. */
-    private int heroMaxWidth, heroNameMaxWidth;
+    private int heroNameMaxWidth;
     private View heroShelf;
     private TextView heroName;
-    private TextView heroDesc;
     private TextView heroWhere;
-    /** The place on screen and a few lines about it; null for the user's own wallpapers. */
+    /** The place on screen and its location; null for the user's own wallpapers. */
     private String placeName;
-    private String placeText = "", placeCountry = "";
     private int ambientColor = -1;
     private boolean heroShown;
     /** The glow behind the tiles. It follows every app, while the shelf only names dock apps. */
@@ -129,11 +130,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private TextView btnWifi;
     private TextView shamsiDate;
     private boolean shamsi;
-    /** Today's prayer times under the clock (PrayerTimes); hidden while prayerZone is empty. */
+    /** Today's Indonesian prayer times; hidden until Android provides a location and city. */
     private TextView prayerRow;
-    private String prayerZone;
     private boolean prayerRefreshRunning;
-    /** The azan over Home at prayer times; null when the theme turns it off or has no prayer_zone. */
+    private boolean prayerCityResolveRunning;
+    private long lastPrayerCityAttempt;
+    private Location lastPrayerCityLocation;
+    private TextView weatherLine;
+    private boolean showWeather, autoLocation, downloadMasjid, downloadAzan;
+    private boolean weatherRefreshRunning, locationUpdatesStarted, azanAudioDownloadRunning;
+    private long lastWeatherRefresh;
+    private Location latestLocation;
+    private LocationManager locationManager;
+    private final LocationListener locationListener = new LocationListener() {
+        @Override public void onLocationChanged(@NonNull Location location) { acceptLocation(location); }
+        @Override public void onProviderEnabled(@NonNull String provider) { readLastKnownLocation(); }
+        @Override public void onProviderDisabled(@NonNull String provider) { }
+        @Override public void onStatusChanged(String provider, int status, Bundle extras) { }
+    };
+    /** The azan over Home at prayer times; null when the theme turns it off. */
     private Azan azan;
     private boolean azanReducedMotion;
     private String vpnApp;
@@ -159,8 +174,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** The grid has been laid out and focused since the last resume; the card prompt waits for this. */
     private boolean tilesReady;
     private boolean tilesAnimatedOnce;
-    /** Grid rows left showing under the dock (config rows_below_dock). */
-    private int rowsBelowDockSetting;
     /** The longest Home holds its first frame while it puts itself together (see holdFirstFrame). */
     private static final long FIRST_FRAME_WAIT_MS = 1200;
     private static final long RETURN_SETTLE_MS = 6000;
@@ -175,9 +188,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private PopupWindow openPopup;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    /** Rotating wallpaper (Config.wallpapers), the view that shows it and the bitmap on screen. */
-    private List<File> wallpapers = Collections.emptyList();
-    private long wallpaperIntervalMs;
+    /** Commons wallpaper URLs stay in memory; only the currently displayed bitmap is retained. */
+    private List<HomeWallpapers.Photo> internetWallpapers = Collections.emptyList();
+    /** Optional theme wallpapers used when masjid_home is disabled. */
+    private List<File> localWallpapers = Collections.emptyList();
+    private volatile boolean homeWallpaperRefreshRunning;
     /** Decodes the next picture off the main thread, so a switch never stutters the D-pad animations. */
     private final java.util.concurrent.ExecutorService wallDecoder = java.util.concurrent.Executors.newSingleThreadExecutor();
     private long wallShownAt;
@@ -185,22 +200,41 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private android.graphics.Bitmap wallBitmap;
     /** Settings kept for the places refresh, which runs after onCreate. */
     private Config config;
-    /** Pictures of places are on (see PlaceWallpapers); they are dimmed behind the tiles. */
+    private SoundPool focusSoundPool;
+    private int focusSoundId;
+    private boolean focusSoundLoaded;
+    private int lastSoundFocus = -1;
+    /** Whether the currently shown wallpaper has place-specific dimming and header text. */
     private boolean placesMode;
-    /** Mosque photos (Masjid) in the places' stead: the same dimming and shelf, the theme's own captions. */
+    /** Kept for legacy place metadata; the screensaver's Masjid photo source remains separate. */
     private boolean masjidMode;
     private org.json.JSONObject masjidCaptions;
-    private volatile boolean placesRefreshRunning;
+    private volatile boolean masjidRefreshRunning;
     /** Refreshes the network pill when the connection changes: at boot Wi-Fi often connects after Home is shown. */
     private final ConnectivityManager.NetworkCallback networkCallback = new ConnectivityManager.NetworkCallback() {
         @Override
         public void onAvailable(@NonNull Network network) {
-            handler.post(MainActivity.this::updateWifiLabel);
+            handler.post(() -> {
+                updateWifiLabel();
+                syncHomeWallpaperSource();
+            });
+        }
+
+        @Override
+        public void onCapabilitiesChanged(@NonNull Network network, @NonNull NetworkCapabilities capabilities) {
+            if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                handler.post(MainActivity.this::syncHomeWallpaperSource);
+            }
         }
 
         @Override
         public void onLost(@NonNull Network network) {
-            handler.post(MainActivity.this::updateWifiLabel);
+            handler.post(() -> {
+                updateWifiLabel();
+                if (!hasValidatedInternet()) {
+                    handler.removeCallbacks(wallTick);
+                }
+            });
         }
     };
     /** Shows the Inputs pill once the TV registers an input: at boot HDMI inputs can appear after Home is shown. */
@@ -240,11 +274,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private final Runnable minuteTick = new Runnable() {
         @Override
         public void run() {
+            updateHeaderDate();
             updateShamsiDate();
             updatePrayerTimes();
+            updateWeather();
             checkAzan();
             updateWifiLabel();
-            refreshPlacesIfDue();
+            syncHomeWallpaperSource();
+            refreshMasjidPhotos();
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -253,6 +290,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        prepareFocusSound();
         density = getResources().getDisplayMetrics().density;
         // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
         Config cfg = Config.load(this);
@@ -273,37 +311,25 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         else launch.edit().putLong("boot_at", bootAt).apply();
         root.setBackgroundColor(cfg.backgroundColor);
         config = cfg;
-        wallpapers = cfg.wallpapers;
-        wallpaperIntervalMs = cfg.wallpaperIntervalMs;
-        placesMode = cfg.places;
-        // Places only, when they are on: never the theme's own pictures, even before the first
-        // week's places have arrived.
-        List<File> masjid = cfg.masjidHome ? Masjid.list(this) : Collections.emptyList();
-        if (!masjid.isEmpty()) {
-            masjidMode = true;
-            placesMode = true;
-            masjidCaptions = Masjid.captions(Masjid.dir(this));
-            wallpapers = masjid;
-        } else if (placesMode) {
-            wallpapers = PlaceWallpapers.list(this);
+        HomeWallpapers.clearLegacyCache(this);
+        placesMode = false;
+        masjidMode = false;
+        if (!cfg.masjidHome) {
+            localWallpapers = !cfg.wallpapers.isEmpty() ? cfg.wallpapers
+                    : cfg.wallpaper != null ? Collections.singletonList(cfg.wallpaper) : Collections.emptyList();
+            if (!localWallpapers.isEmpty()) showNextLocalWallpaper(false);
         }
-        if (!wallpapers.isEmpty()) showNextWallpaper(false);
-        else if (cfg.wallpaper != null && !placesMode) setWallpaper(decodeWallpaper(cfg.wallpaper), false);
         glass = findViewById(R.id.glass);
         ambient = findViewById(R.id.ambient);
         Backdrop.setWorker(wallDecoder, handler);
         heroShelf = findViewById(R.id.heroShelf);
         heroName = findViewById(R.id.heroName);
-        heroDesc = findViewById(R.id.heroDesc);
         heroWhere = findViewById(R.id.heroWhere);
-        // A share of the space between the side paddings, so the description wraps into a column
-        // rather than running the width of the screen. The name is one line, allowed a wider share.
+        // The name may use more of the screen than the short location line.
         int usable = getResources().getDisplayMetrics().widthPixels - (int) ((55 + 56) * density);
-        heroMaxWidth = Math.round(usable * HERO_WIDTH_SHARE);
         heroNameMaxWidth = Math.round(usable * HERO_NAME_WIDTH_SHARE);
         heroName.setMaxWidth(heroNameMaxWidth);
-        heroDesc.setMaxWidth(heroMaxWidth);
-        // The shelf grows and shrinks with the name and the description, so it hangs from its
+        // The shelf grows and shrinks with the name and location, so it hangs from its
         // bottom edge: every time it is measured, its top is worked out again. Positioning it by
         // the height it happened to have beforehand is what let a tall block run into the dock.
         heroShelf.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, orr, ob) -> {
@@ -311,6 +337,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
         btnWifi = findViewById(R.id.btnWifi);
         if (!cfg.showNetworkPill) btnWifi.setVisibility(View.GONE);
+        View btnHome = findViewById(R.id.btnHome);
+        if (!cfg.showHomeSettingsShortcut) btnHome.setVisibility(View.GONE);
         shamsiDate = findViewById(R.id.shamsiDate);
         shamsi = cfg.shamsiDate;
         if (shamsi) {
@@ -320,49 +348,38 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             date.setPadding(0, (int) (4 * density), 0, 0);
         }
         prayerRow = findViewById(R.id.prayerRow);
-        prayerZone = cfg.prayerZone;
-        if (cfg.azan && !prayerZone.isEmpty()) {
+        weatherLine = findViewById(R.id.weatherLine);
+        showWeather = cfg.weather;
+        autoLocation = cfg.autoLocation;
+        downloadMasjid = cfg.downloadMasjid;
+        downloadAzan = cfg.downloadAzan;
+        if (!showWeather) weatherLine.setVisibility(View.GONE);
+        updateHeaderDate();
+        if (cfg.azan) {
             azan = new Azan(root, () -> {
                 View f = getCurrentFocus();
                 if (f != null) f.requestFocus();
             });
             azanReducedMotion = cfg.reducedMotion;
         }
-        // Beside the clock, the date sits on the digits' baseline, and AM/PM rests halfway between
-        // the top of the digits and the top of the date, its letters' foot on that line.
-        TextView clock = findViewById(R.id.clock), amPm = findViewById(R.id.ampm), dateLine = findViewById(R.id.date);
-        View dateBlock = findViewById(R.id.dateBlock);
-        dateBlock.setTranslationY(dateLine.getPaint().getFontMetrics().descent - clock.getPaint().getFontMetrics().descent);
-        // Placed once the whole column is laid out, AM/PM and the date both.
-        ((View) dateBlock.getParent()).addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            android.graphics.Rect cap = new android.graphics.Rect();
-            dateLine.getPaint().getTextBounds("O", 0, 1, cap);
-            float capsAtTop = ClockDream.capInset(clock, "0") - ClockDream.capInset(amPm, "AM");
-            float foot = amPm.getTop() + capsAtTop + amPm.getBaseline();
-            float dateTop = dateBlock.getTop() + dateBlock.getTranslationY() + dateLine.getTop() + dateLine.getBaseline() + cap.top;
-            amPm.setTranslationY(Math.round(capsAtTop + (foot + dateTop) / 2f - foot));
-        });
         vpnApp = cfg.vpnApp;
         moduleCards = cfg.moduleCards;
         hiddenApps = new HashSet<>(cfg.hiddenApps);
 
         grid = findViewById(R.id.grid);
-        grid.setLayoutManager(new GridLayoutManager(this, COLUMNS) {
+        grid.setLayoutManager(new LinearLayoutManager(this, RecyclerView.HORIZONTAL, false) {
             @Override
             public void onLayoutChildren(RecyclerView.Recycler recycler, RecyclerView.State state) {
-                // The dock's line is set before any row is placed. Set afterwards, the grid kept its
-                // rows where the first layout had put them, and Home came back with the dock and its
-                // tray hundreds of pixels up the screen until focus slid them down.
+                // Place the single horizontal app row before laying it out, so it stays at the
+                // bottom of the screen after Home is rebuilt.
                 parkDock();
                 super.onLayoutChildren(recycler, state);
             }
         });
         grid.setHasFixedSize(true);
         grid.setItemAnimator(null);
-        DockDecoration tray = new DockDecoration(COLUMNS, density);
+        DockDecoration tray = new DockDecoration(Integer.MAX_VALUE, density, cfg.showDockTray);
         grid.addItemDecoration(tray);
-        // The top-right buttons line up with the dock, which is only known once the tiles are laid out.
-        grid.getViewTreeObserver().addOnGlobalLayoutListener(this::alignTopButtons);
         // Glass shows the blurred wallpaper behind it: the dock tray (drawn by the grid) and the
         // top-bar pills redraw when a new blurred copy is ready.
         Backdrop.watch(grid);
@@ -375,7 +392,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         // The grid only shows the shape on the tray.
         glider.addCompanion(grid, tray.area);
-        for (int id : new int[]{R.id.btnInputs, R.id.btnWifi, R.id.btnSettings}) {
+        for (int id : new int[]{R.id.btnInputs, R.id.btnWifi, R.id.btnHome, R.id.btnSettings}) {
             View pill = findViewById(id);
             pill.setBackground(new GlassDrawable(pill, 21 * density, density, glider));
             glider.addCompanion(pill);
@@ -397,9 +414,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter = new AppAdapter(this, this, COLUMNS, cfg);
         grid.setAdapter(adapter);
 
-        // tvOS layout: push the dock row towards the bottom of the screen, leaving room for
-        // rows_below_dock grid rows under it; the rest of the grid stays below until you press Down.
-        rowsBelowDockSetting = cfg.rowsBelowDock;
+        // Keep the horizontal app row near the bottom of the screen.
         grid.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
             parkDock();
             updateTopFade();
@@ -416,9 +431,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
                 updateTopFade();
                 if (!glassShown) return;
+                glassTargetX -= dx;
                 glassTargetY -= dy;
                 glassScrollShift -= dy;
-                glider.scrolled(dy);
+                glider.scrolled(dx, dy);
             }
         });
 
@@ -450,6 +466,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
         btnInputs.setOnClickListener(v -> showInputs());
+        btnHome.setOnClickListener(v -> open(new Intent(this, HomeSettingsActivity.class)));
         btnWifi.setOnClickListener(v -> openNetworkPill());
         btnWifi.setOnLongClickListener(v -> {
             open(systemIntent(Settings.ACTION_WIFI_SETTINGS));
@@ -457,8 +474,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
         btnSettings.setOnClickListener(v -> open(systemIntent(Settings.ACTION_SETTINGS)));
         btnSettings.setOnLongClickListener(v -> {
-            if (!moduleCards) return false;   // off: a long press does nothing, as before the feature
-            showModuleCards();
+            showLauncherOptions(v);
             return true;
         });
 
@@ -469,20 +485,30 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return true;
             if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 // Back to the dock tile Up came from, not wherever the focus finder lands.
-                focusTile(lastFocused % COLUMNS);
+                focusTile(Math.max(0, lastFocused));
                 return true;
             }
             if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-                // The left end is Inputs, or Wi-Fi on a box without inputs, or Settings when both are gone.
-                return v.getId() == R.id.btnInputs
-                        || (v.getId() == R.id.btnWifi && btnInputs.getVisibility() != View.VISIBLE)
-                        || (v.getId() == R.id.btnSettings && btnInputs.getVisibility() != View.VISIBLE
-                            && btnWifi.getVisibility() != View.VISIBLE);
+                int id = v.getId();
+                if (id == R.id.btnInputs) return true;
+                if (id == R.id.btnWifi) return btnInputs.getVisibility() != View.VISIBLE;
+                if (id == R.id.btnHome) {
+                    if (btnWifi.getVisibility() == View.VISIBLE) btnWifi.requestFocus();
+                    else if (btnInputs.getVisibility() == View.VISIBLE) btnInputs.requestFocus();
+                    return true;
+                }
+                if (id == R.id.btnSettings) {
+                    if (btnHome.getVisibility() == View.VISIBLE) btnHome.requestFocus();
+                    else if (btnWifi.getVisibility() == View.VISIBLE) btnWifi.requestFocus();
+                    else if (btnInputs.getVisibility() == View.VISIBLE) btnInputs.requestFocus();
+                    return true;
+                }
             }
             return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnSettings;
         };
         btnInputs.setOnKeyListener(pillKeys);
         btnWifi.setOnKeyListener(pillKeys);
+        btnHome.setOnKeyListener(pillKeys);
         btnSettings.setOnKeyListener(pillKeys);
 
         // Hide the glass when focus leaves the tiles.
@@ -513,20 +539,41 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      * A theme's full-screen picture behind everything. Decoded once, downsampled to the screen so a 4K
      * JPEG costs a 1080p bitmap at most (about 8 MB), which is the price of a wallpaper on a 1 GB TV.
      */
-    private android.graphics.Bitmap decodeWallpaper(File file) {
+    private android.graphics.Bitmap decodeWallpaper(byte[] bytes) {
         try {
             android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
             android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
             opts.inJustDecodeBounds = true;
-            android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
+            android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, opts);
             int sample = 1;
             while (opts.outWidth / (sample * 2) >= dm.widthPixels && opts.outHeight / (sample * 2) >= dm.heightPixels) sample *= 2;
             opts.inJustDecodeBounds = false;
             opts.inSampleSize = sample;
             opts.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;   // no alpha needed, half the memory
-            return android.graphics.BitmapFactory.decodeFile(file.getPath(), opts);
+            return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length, opts);
         } catch (Exception | OutOfMemoryError e) {
             // A bad or huge picture must never take the home screen down; the plain colour stays.
+            return null;
+        }
+    }
+
+    /** Decodes a theme wallpaper to screen size without loading its full-resolution source. */
+    private android.graphics.Bitmap decodeWallpaper(File file) {
+        if (file == null || !file.isFile()) return null;
+        try {
+            android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            android.graphics.BitmapFactory.Options opts = new android.graphics.BitmapFactory.Options();
+            opts.inJustDecodeBounds = true;
+            android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath(), opts);
+            int sample = 1;
+            while (opts.outWidth / (sample * 2) >= dm.widthPixels
+                    && opts.outHeight / (sample * 2) >= dm.heightPixels) sample *= 2;
+            opts.inJustDecodeBounds = false;
+            opts.inSampleSize = sample;
+            opts.inPreferredConfig = android.graphics.Bitmap.Config.RGB_565;
+            return android.graphics.BitmapFactory.decodeFile(file.getAbsolutePath(), opts);
+        } catch (Exception | OutOfMemoryError e) {
+            android.util.Log.w("TvHome.ThemeWallpaper", "could not decode " + file.getName() + ": " + e.getMessage());
             return null;
         }
     }
@@ -582,61 +629,149 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         Backdrop.update(bmp, dm.widthPixels, dm.heightPixels, placesMode ? 0xFF7A7A7A : 0, wallDecoder, handler);
     }
 
-    /** Shows the next picture from the wallpapers folder; the position survives restarts. */
+    /** Downloads and shows the next Commons photo; image bytes are never written to storage. */
     private void showNextWallpaper(boolean fade) {
-        android.content.SharedPreferences prefs = getSharedPreferences("wallpaper", MODE_PRIVATE);
-        int next = (prefs.getInt("index", -1) + 1) % wallpapers.size();
+        if (internetWallpapers.isEmpty()) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("home_wallpaper", MODE_PRIVATE);
+        int next = (prefs.getInt("index", -1) + 1) % internetWallpapers.size();
         prefs.edit().putInt("index", next).apply();
         wallShownAt = android.os.SystemClock.elapsedRealtime();
-        final File file = wallpapers.get(next);
-        // On a cold start, name the place straight away: waiting for the decode showed the app's name
-        // at full size and shrank it a moment later. After that the name changes with the picture,
-        // or it would name the next place over the last one's picture while that one decodes.
-        if (placeName == null) setPlace(file);
+        final HomeWallpapers.Photo photo = internetWallpapers.get(next);
         final boolean firstPicture = wallBitmap == null;
         wallDecoder.execute(() -> {
-            android.graphics.Bitmap bmp = decodeWallpaper(file);
+            android.graphics.Bitmap bmp = null;
+            try {
+                byte[] bytes = HomeWallpapers.download(photo);
+                bmp = decodeWallpaper(bytes);
+            } catch (Exception | OutOfMemoryError e) {
+                android.util.Log.w("TvHome.HomeWallpaper", "could not load Commons photo: " + e.getMessage());
+            }
+            if (bmp == null) return;
             // After the first picture, the blur is made here, before the picture is shown, so the glass
             // changes with the wallpaper rather than after it. The first picture of a fresh start does
             // not wait for its blur: Home is held for it, and the glass catches up a moment later.
             android.util.DisplayMetrics dm = getResources().getDisplayMetrics();
+            final android.graphics.Bitmap decoded = bmp;
             android.graphics.Bitmap blur = firstPicture ? null
-                    : Backdrop.blur(bmp, dm.widthPixels, dm.heightPixels, placesMode ? 0xFF7A7A7A : 0);
+                    : Backdrop.blur(decoded, dm.widthPixels, dm.heightPixels, placesMode ? 0xFF7A7A7A : 0);
+            final android.graphics.Bitmap blurred = blur;
             handler.post(() -> {
-                if (isDestroyed()) return;
-                setWallpaper(bmp, fade, blur);
-                setPlace(file);
+                if (isDestroyed() || !hasValidatedInternet()) {
+                    if (!decoded.isRecycled()) decoded.recycle();
+                    if (blurred != null && !blurred.isRecycled()) blurred.recycle();
+                    return;
+                }
+                wallShownAt = android.os.SystemClock.elapsedRealtime();
+                setWallpaper(decoded, fade, blurred);
+                setPlace(photo);
             });
         });
     }
 
-    /** Switches to the next picture every wallpaper interval while Home is in front. */
+    /** Switches to the next Internet photo every three minutes while Home is in front. */
     private final Runnable wallTick = new Runnable() {
         @Override
         public void run() {
-            if (wallpapers.size() >= 2) showNextWallpaper(true);
-            handler.postDelayed(this, wallpaperIntervalMs);
+            if (config != null && !config.masjidHome) {
+                if (localWallpapers.size() >= 2) showNextLocalWallpaper(true);
+                if (config.wallpaperIntervalMs > 0 && localWallpapers.size() >= 2)
+                    handler.postDelayed(this, config.wallpaperIntervalMs);
+                return;
+            }
+            if (!hasValidatedInternet()) {
+                return;
+            }
+            if (internetWallpapers.size() >= 2) showNextWallpaper(true);
+            handler.postDelayed(this, HOME_INTERNET_WALLPAPER_INTERVAL_MS);
         }
     };
 
-    /** Fetches the week's places in the background, then switches the rotation to them. */
-    private void refreshPlacesIfDue() {
-        if (!placesMode || masjidMode || placesRefreshRunning || !PlaceWallpapers.due(this)) return;
-        placesRefreshRunning = true;
-        new Thread(() -> {
-            boolean changed = PlaceWallpapers.refresh(getApplicationContext());
+    /** Shows a theme wallpaper, advancing its local index without keeping full-size files in memory. */
+    private void showNextLocalWallpaper(boolean fade) {
+        if (localWallpapers.isEmpty()) return;
+        android.content.SharedPreferences prefs = getSharedPreferences("theme_wallpaper", MODE_PRIVATE);
+        int next = (prefs.getInt("index", -1) + 1) % localWallpapers.size();
+        prefs.edit().putInt("index", next).apply();
+        File file = localWallpapers.get(next);
+        wallShownAt = android.os.SystemClock.elapsedRealtime();
+        wallDecoder.execute(() -> {
+            android.graphics.Bitmap bmp = decodeWallpaper(file);
+            if (bmp == null) return;
             handler.post(() -> {
-                placesRefreshRunning = false;
-                if (!changed || isDestroyed()) return;
-                List<File> places = PlaceWallpapers.list(this);
-                if (places.isEmpty()) return;
-                // Last week's pictures are gone: show one of this week's straight away, so the
-                // name on the shelf and the picture behind it always match.
-                wallpapers = places;
-                showNextWallpaper(wallBitmap != null);
-                if (!isFinishing() && hasWindowFocus()) startWallpaperRotation();
+                if (isDestroyed() || (config != null && config.masjidHome)) {
+                    if (!bmp.isRecycled()) bmp.recycle();
+                    return;
+                }
+                setWallpaper(bmp, fade);
+                setPlace((HomeWallpapers.Photo) null);
             });
-        }, "place-wallpapers").start();
+        });
+    }
+
+    /** Fetches only Commons photo metadata; each selected photo is downloaded into memory when displayed. */
+    private void syncHomeWallpaperSource() {
+        if (config == null || !config.masjidHome) return;
+        if (!hasValidatedInternet()) {
+            handler.removeCallbacks(wallTick);
+            return;
+        }
+        if (homeWallpaperRefreshRunning || !HomeWallpapers.due(this, internetWallpapers.size())) return;
+        homeWallpaperRefreshRunning = true;
+        new Thread(() -> {
+            List<HomeWallpapers.Photo> photos = Collections.emptyList();
+            try {
+                photos = HomeWallpapers.refresh(getApplicationContext());
+            } finally {
+                final List<HomeWallpapers.Photo> result = photos;
+                handler.post(() -> {
+                    homeWallpaperRefreshRunning = false;
+                    if (isDestroyed()) return;
+                    if (result.isEmpty()) return;
+                    internetWallpapers = result;
+                    placesMode = false;
+                    masjidMode = false;
+                    masjidCaptions = null;
+                    if (hasWindowFocus()) {
+                        showNextWallpaper(wallBitmap != null);
+                        startWallpaperRotation();
+                    }
+                });
+            }
+        }, "home-wallpapers").start();
+    }
+
+    private boolean hasValidatedInternet() {
+        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        if (cm == null) return false;
+        Network active = cm.getActiveNetwork();
+        NetworkCapabilities caps = active != null ? cm.getNetworkCapabilities(active) : null;
+        return caps != null && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+    }
+
+    /** Keeps the original local mosque photo download for the screensaver; Home only fetches manifest URLs. */
+    private void refreshMasjidPhotos() {
+        if (!downloadMasjid || masjidRefreshRunning || !Masjid.due(this)) return;
+        masjidRefreshRunning = true;
+        new Thread(() -> {
+            Masjid.refresh(getApplicationContext());
+            handler.post(() -> {
+                masjidRefreshRunning = false;
+            });
+        }, "mosque-photos").start();
+    }
+
+    /** Downloads missing default azan MP3s in the background to the app's local files. */
+    private void ensureAzanAudio() {
+        if (azanAudioDownloadRunning) return;
+        azanAudioDownloadRunning = true;
+        new Thread(() -> {
+            try {
+                AzanAudio.ensureDownloaded(getApplicationContext());
+            } finally {
+                handler.post(() -> azanAudioDownloadRunning = false);
+            }
+        }, "azan-audio-download").start();
     }
 
     /** Clears the TV's app caches when due, once Home has sat idle on screen for a while. */
@@ -644,15 +779,23 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (hasWindowFocus() && config != null) CacheCleaner.maybeRun(this, config.cacheCleanDays);
     };
 
-    /** Whenever Home comes back: picks the rotation up where the interval left it. */
+    /** Whenever Home comes back: resumes the three-minute rotation where the interval left it. */
     private void startWallpaperRotation() {
-        refreshPlacesIfDue();
+        refreshMasjidPhotos();
+        syncHomeWallpaperSource();
         handler.removeCallbacks(wallTick);
-        if (wallpapers.size() < 2 || wallpaperIntervalMs <= 0) return;
+        if (config != null && !config.masjidHome) {
+            if (localWallpapers.size() < 2 || config.wallpaperIntervalMs <= 0) return;
+            long waited = android.os.SystemClock.elapsedRealtime() - wallShownAt;
+            handler.postDelayed(wallTick, Math.max(RETURN_SETTLE_MS, config.wallpaperIntervalMs - waited));
+            return;
+        }
+        if (!hasValidatedInternet()) return;
+        if (internetWallpapers.size() < 2) return;
         long waited = android.os.SystemClock.elapsedRealtime() - wallShownAt;
         // A picture that fell due while you were in an app waits a few seconds: decoding, blurring
         // and fading it the moment you come back competed with Home for the TV's slow CPU.
-        handler.postDelayed(wallTick, Math.max(RETURN_SETTLE_MS, wallpaperIntervalMs - waited));
+        handler.postDelayed(wallTick, Math.max(RETURN_SETTLE_MS, HOME_INTERNET_WALLPAPER_INTERVAL_MS - waited));
     }
 
     /**
@@ -682,12 +825,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     protected void onStop() {
         hiddenSinceResume = true;
         handler.removeCallbacks(cacheClean);
+        stopLocationUpdates();
         super.onStop();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        startAutoLocation();
+        if (downloadMasjid) refreshMasjidPhotos();
+        if (downloadAzan && config != null && config.azan) ensureAzanAudio();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(packageReceiver, packageFilter, Context.RECEIVER_NOT_EXPORTED);
         } else {
@@ -698,6 +845,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         resuming = true;
         reloadApps(true);
         updateShamsiDate();
+        updateHeaderDate();
         updatePrayerTimes();
         Azan.homeResumed = true;
         checkAzan();
@@ -762,7 +910,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         final String returnKey = lastFocusedKey;
         final int returnSlot = lastFocused;
         final List<Cards.Card> none = Collections.emptyList();
-        cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, hiddenApps, Cards.load(Cards.storeFile(this))), none) : none;
+        Set<String> allHidden = adapter.hiddenPackages();
+        cards = moduleCards ? CardFeature.run(() -> Cards.discover(this, allHidden, Cards.load(Cards.storeFile(this))), none) : none;
         boolean rebuilt = adapter.reload(cards.isEmpty() ? none : CardFeature.run(() -> Cards.shown(cards), none));
         lastFocusedKey = returnKey;
         lastFocused = returnSlot;
@@ -805,7 +954,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) showCardPrompt();
+        if (hasFocus) {
+            syncHomeWallpaperSource();
+            startWallpaperRotation();
+            showCardPrompt();
+        }
     }
 
     /**
@@ -821,6 +974,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        if (focusSoundPool != null) {
+            focusSoundPool.release();
+            focusSoundPool = null;
+            focusSoundLoaded = false;
+        }
         wallDecoder.shutdownNow();
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
@@ -839,10 +997,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     // ---- glass highlight -------------------------------------------------------------------------
 
     /** Reused by every focus move. */
-    private final Rect tileRect = new Rect(), showRect = new Rect();
+    private final Rect tileRect = new Rect();
 
     @Override
     public void onTileFocused(int position, View card) {
+        if (lastSoundFocus >= 0 && lastSoundFocus != position && !resuming) playFocusSound();
+        lastSoundFocus = position;
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
         // Tile rect in root coordinates, using layout positions (ignores the scale animation).
@@ -882,38 +1042,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         gliderOnPill = false;
         glassShown = true;
-        View item = (View) card.getParent();
-        if (position < COLUMNS) {
-            // Dock: park it at the bottom of the screen and show the top shelf for this app.
-            int decoratedTop = item.getTop() - (int) (6 * density);
-            int dy = decoratedTop - grid.getPaddingTop();
-            // A 1px mismatch used to start a scroll on every dock move. Only scroll when the row is
-            // actually off; reduced motion does it in one jump so it does not fight the highlight.
-            boolean scroll = Math.abs(dy) > (int) (8 * density);
-            if (scroll) {
-                if (reducedMotion) grid.scrollBy(0, dy);
-                else grid.smoothScrollBy(0, dy);
-            }
-            showHero(position, scroll ? r.top - dy : r.top);
-        } else {
-            // Below the dock there is no shelf, but the glow still takes this app's colour, so every
-            // tile lights the room the same way the dock does.
-            hideShelf();
-            showAmbient(adapter.ambientColorAt(position));
-            // Scroll just enough so the whole glass (not only the tile) is visible.
-            showRect.set(0, -(int) pad * 2, item.getWidth(), item.getHeight() + (int) pad);
-            grid.requestChildRectangleOnScreen(item, showRect, reducedMotion);
-        }
+        // Every app belongs to the same horizontal row; focusTile handles revealing it with one
+        // shared left/right scroll animation before focus arrives.
+        if (placeName != null) hideShelf();
+        else showHero(position, r.top);
+        showAmbient(adapter.ambientColorAt(position));
     }
 
     // ---- top shelf -------------------------------------------------------------------------------
 
     private void showHero(int position, float dockTopInRoot) {
-        // The place the picture is of, when there is one; the app's own name is the fallback for
-        // the user's own wallpapers, which carry no title.
-        final String label = placeName != null ? placeName : adapter.labelAt(position);
-        final String desc = placeName != null ? placeText : "";
-        final String where = placeName != null ? placeCountry : "";
+        // Internet wallpaper captions stay off Home; the focused app name is the shelf fallback.
+        final String label = adapter.labelAt(position);
+        final String where = "";
         int color = adapter.ambientColorAt(position);
         heroBottom = dockTopInRoot - HERO_GAP_DP * density;
         float y = heroBottom - heroShelf.getHeight();
@@ -923,7 +1064,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             // Snap the shelf instead of sliding and fading it: each of those frames repaints the
             // full-screen panel, and this switch exists for the GPUs that cannot afford it.
             heroShelf.animate().cancel();
-            setHeroText(label, where, desc);
+            setHeroText(label, where);
             heroShelf.setY(y);
             heroShelf.setTranslationX(0f);
             heroShelf.setAlpha(1f);
@@ -933,7 +1074,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
 
         if (!heroShown) {
-            setHeroText(label, where, desc);
+            setHeroText(label, where);
             heroShelf.setY(y);
             heroShelf.setTranslationX(0f);
             // Coming back to Home, the words are simply there with the picture: faded in after the
@@ -945,7 +1086,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             heroShown = true;
         } else if (changed) {
             heroShelf.animate().alpha(0f).translationX(-12 * density).setDuration(120).withEndAction(() -> {
-                setHeroText(label, where, desc);
+                setHeroText(label, where);
                 heroShelf.setY(y);
                 heroShelf.setTranslationX(12 * density);
                 heroShelf.animate().alpha(1f).translationX(0f).setDuration(200).start();
@@ -957,33 +1098,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             heroShelf.setY(y);
             showAmbient(color);
         }
-    }
-
-    /**
-     * Lines the top-right buttons up with the dock: the Settings circle's right edge sits on the
-     * right edge of the last dock card, and Inputs follows on its left. Card width follows the
-     * column count and the screen, so the edge is measured rather than written down.
-     */
-    private void alignTopButtons() {
-        // This runs on every layout pass, which during a grid scroll is every frame, so it keeps
-        // its views and rectangles rather than looking them up or allocating each time.
-        if (topRow == null) {
-            topRow = findViewById(R.id.topButtons);
-            topSettings = findViewById(R.id.btnSettings);
-        }
-        if (topRow == null || topSettings.getWidth() == 0) return;
-        RecyclerView.ViewHolder last = grid.findViewHolderForAdapterPosition(COLUMNS - 1);
-        if (last == null) return;
-        View card = last.itemView.findViewById(R.id.card);
-        if (card == null || card.getWidth() == 0) return;
-        // Layout positions, not drawn ones: a focused card is scaled up, and the row's own shift
-        // must not be counted twice.
-        alignCard.set(0, 0, card.getWidth(), card.getHeight());
-        root.offsetDescendantRectToMyCoords(card, alignCard);
-        alignButton.set(0, 0, topSettings.getWidth(), topSettings.getHeight());
-        root.offsetDescendantRectToMyCoords(topSettings, alignButton);
-        float shift = alignCard.right - alignButton.right;
-        if (Math.abs(topRow.getTranslationX() - shift) >= 1f) topRow.setTranslationX(shift);
     }
 
     /**
@@ -1001,7 +1115,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     private boolean isTopPill(View v) {
         int id = v.getId();
-        return id == R.id.btnInputs || id == R.id.btnWifi || id == R.id.btnSettings;
+        return id == R.id.btnInputs || id == R.id.btnWifi || id == R.id.btnHome || id == R.id.btnSettings;
     }
 
     /** Sends the focus shape onto a pill: from a tile it glides up and narrows into the pill. */
@@ -1018,21 +1132,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         glider.moveTo(l, t, l + pill.getWidth(), t + pill.getHeight(), pill.getHeight() / 2f);
     }
 
-    /** The shelf's two lines. An empty description takes no room, so the title keeps its place. */
-    private void setHeroText(String title, String where, String desc) {
+    /** The shelf shows the focused app name; photo captions stay hidden on Home. */
+    private void setHeroText(String title, String where) {
         heroName.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, titleSizeSp(title));
         heroName.setText(title);
         heroWhere.setText(where);
         heroWhere.setVisibility(where.isEmpty() ? View.GONE : View.VISIBLE);
-        // The description sits further down under a country line; with none, close under the name.
-        ViewGroup.MarginLayoutParams descLp = (ViewGroup.MarginLayoutParams) heroDesc.getLayoutParams();
-        int top = Math.round((where.isEmpty() ? 6f : 9.5f) * density);
-        if (descLp.topMargin != top) {
-            descLp.topMargin = top;
-            heroDesc.setLayoutParams(descLp);
-        }
-        heroDesc.setText(desc);
-        heroDesc.setVisibility(desc.isEmpty() ? View.GONE : View.VISIBLE);
     }
 
     /**
@@ -1056,47 +1161,33 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return out.toString();
     }
 
-    /**
-     * The largest size at which the name still fits on one line, up to its share of the width.
-     * Names run longer than app names ("Wroclaw Market Square"), and a name cut short tells the
-     * viewer nothing, so a long one is set smaller rather than clipped.
-     */
+    /** The largest size at which the caption wraps into at most two lines without being cut off. */
     private float titleSizeSp(String title) {
         if (title == null || title.isEmpty() || heroNameMaxWidth <= 0) return HERO_TITLE_MAX_SP;
         android.text.TextPaint paint = new android.text.TextPaint(heroName.getPaint());
         float scaled = getResources().getDisplayMetrics().scaledDensity;
         for (float sp = HERO_TITLE_MAX_SP; sp > HERO_TITLE_MIN_SP; sp -= 2f) {
             paint.setTextSize(sp * scaled);
-            if (paint.measureText(title) <= heroNameMaxWidth) return sp;
+            android.text.StaticLayout layout = android.text.StaticLayout.Builder
+                    .obtain(title, 0, title.length(), paint, heroNameMaxWidth)
+                    .setAlignment(android.text.Layout.Alignment.ALIGN_NORMAL)
+                    .setIncludePad(false)
+                    .setMaxLines(2)
+                    .setEllipsize(android.text.TextUtils.TruncateAt.END)
+                    .build();
+            int lastLine = layout.getLineCount() - 1;
+            if (lastLine >= 0 && layout.getEllipsisCount(lastLine) == 0) return sp;
         }
         return HERO_TITLE_MIN_SP;
     }
 
-    /**
-     * Follows the rotation: the shelf names whichever place is on screen. Called after the picture
-     * changes, so the words and the picture never disagree.
-     */
-    private void setPlace(File picture) {
-        String[] about = masjidMode ? Masjid.describe(picture, masjidCaptions)
-                : placesMode ? PlaceWallpapers.describe(picture) : null;
-        String title = about != null ? titleCase(about[0]) : null;
-        String overview = about != null ? about[1] : "";
-        String country = about != null && about.length > 2 ? about[2] : "";
+    /** Tracks the current wallpaper title so Home can keep its photo caption hidden. */
+    private void setPlace(HomeWallpapers.Photo photo) {
+        String title = photo == null ? null : titleCase(photo.displayTitle());
         if (title == null ? placeName == null : title.equals(placeName)) return;
         placeName = title;
-        placeText = overview;
-        placeCountry = country;
-        // When the shelf is up, the words fade out with the old picture and back in with the new
-        // one, inside the picture's own cross-fade: swapped at once, the next place's name sat over
-        // the last one's picture while it faded. The layout listener puts the shelf back where it
-        // belongs once the new lines have been measured.
-        if (heroShown && title != null) {
-            heroShelf.animate().cancel();
-            heroShelf.animate().alpha(0f).setDuration(reducedMotion ? 100 : 250).withEndAction(() -> {
-                setHeroText(title, country, overview);
-                if (heroShown) heroShelf.animate().alpha(1f).setDuration(reducedMotion ? 120 : 400).start();
-            }).start();
-        }
+        // The photo name is intentionally omitted from Home; keep the focused app tile as its label.
+        if (title != null) hideShelf();
     }
 
     /**
@@ -1123,19 +1214,20 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         gridWrap.setFadeStrength(inBand ? 1f : 0f);
     }
 
-    /**
-     * The dock row sits towards the bottom of the screen, leaving room for rows_below_dock grid rows
-     * under it; the rest of the grid stays below until you press Down. Sets the grid's top padding
-     * for that, and says whether it was already right.
-     */
+    /** Keeps the horizontal app row near the bottom edge and says whether it was already positioned. */
     private boolean parkDock() {
         int h = grid.getHeight();
         if (h <= 0) return false;
         // Item height follows the tile size, which follows the column count (AppAdapter.tileWidthPx).
         int inner = grid.getWidth() - grid.getPaddingLeft() - grid.getPaddingRight();
-        int itemH = AppAdapter.itemHeightPx(AppAdapter.tileHeightPx(AppAdapter.tileWidthPx(inner, COLUMNS, density)), density);
-        int dockRow = itemH + (int) ((6 + 12) * density);   // item height plus DockDecoration offsets
-        int want = Math.max(0, h - dockRow - itemH * rowsBelowDockSetting - (int) (30 * density));
+        int tileH = AppAdapter.tileHeightPx(AppAdapter.tileWidthPx(inner, COLUMNS, density));
+        int itemH = AppAdapter.itemHeightPx(tileH, density);
+        int dockRow = itemH + Math.round((6 + 12) * density);
+        // Anchor the visible tile near the bottom, leaving room for its focus scale and shadow.
+        int desiredTop = h - dockRow + Math.round(25 * density);
+        int cardTop = Math.round((6 + 8) * density); // decoration inset plus item_app's top padding
+        int maxTop = Math.max(0, h - tileH - cardTop - Math.round(24 * density));
+        int want = Math.max(0, Math.min(desiredTop, maxTop));
         if (grid.getPaddingTop() == want) return true;
         grid.setPadding(grid.getPaddingLeft(), want, grid.getPaddingRight(), grid.getPaddingBottom());
         return false;
@@ -1151,17 +1243,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private void holdFirstFrame() {
         final long start = android.os.SystemClock.uptimeMillis();
         firstFrameHeld = true;
-        final boolean expectsWallpaper = !wallpapers.isEmpty() || (config.wallpaper != null && !placesMode);
+        final boolean expectsWallpaper = config != null && config.masjidHome && hasValidatedInternet();
         root.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override
             public boolean onPreDraw() {
                 // Parked here rather than by the layout listener alone: while frames are held, the
                 // second layout pass that listener relies on does not always come.
                 boolean parked = parkDock();
-                // The place's name and lines come in the same frame as the picture they describe,
-                // whenever focus lands in the dock, where the shelf shows.
+                // Hold until the wallpaper and app grid are ready; dock app names are drawn on their tiles.
                 boolean whole = adapter.getItemCount() > 0 && grid.getChildCount() > 0 && parked
-                        && (wallBitmap != null || !expectsWallpaper) && (heroShown || lastFocused >= COLUMNS);
+                        && (wallBitmap != null || !expectsWallpaper) && (heroShown || lastFocused >= 0);
                 if (!whole && android.os.SystemClock.uptimeMillis() - start < FIRST_FRAME_WAIT_MS) {
                     return false;   // skip this frame; the next traversal asks again
                 }
@@ -1298,13 +1389,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     private androidx.recyclerview.widget.DefaultItemAnimator moveSlide;
 
-    /** Holding OK on an app: a glass menu to move it, or to open Android's page for it. */
+    /** Holding OK on an app: a glass menu to move or hide it, or to open Android's page for it. */
     @Override
     public boolean onTileHeld(int position, View card) {
         if (openMenu != null || movingPos >= 0) return true;
         FrameLayout panel = (FrameLayout) getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
         LinearLayout rows = panel.findViewById(R.id.rows);
         final String key = adapter.keyAt(position);
+        final String pkg = adapter.packageAt(position);
         if (adapter.canMove(position)) {
             addInputRow(rows, () -> {
                 // No selection gliding back from the menu: it is simply gone, and the app wiggles.
@@ -1312,6 +1404,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 gliderOnPill = false;
                 closeMenu(true);
             }, R.drawable.ic_move, getString(R.string.tile_move), -1, () -> startMove(key));
+        }
+        if (adapter.canHide(position)) {
+            addInputRow(rows, () -> closeMenu(true), R.drawable.ic_lock, getString(R.string.tile_hide_app), -1, () -> {
+                if (adapter.hidePackage(pkg)) {
+                    reloadApps(false);
+                    Toast.makeText(this, getString(R.string.app_hidden, adapter.labelForPackage(pkg)), Toast.LENGTH_SHORT).show();
+                }
+            });
         }
         addInputRow(rows, () -> closeMenu(false), R.drawable.ic_info, getString(R.string.tile_app_info), -1,
                 () -> adapter.openAppInfo(adapter.positionOf(key)));
@@ -1324,6 +1424,57 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int below = menuAt[1] - menuGliderAt[1] + card.getHeight() + (int) (18 * density) + panel.getMeasuredHeight();
         showMenu(panel, rows, card, width, below > root.getHeight() - (int) (24 * density));
         return true;
+    }
+
+    /** The Settings long-press menu includes app visibility even when module cards are turned off. */
+    private void showLauncherOptions(View anchor) {
+        if (openMenu != null) return;
+        FrameLayout panel = (FrameLayout) getLayoutInflater().inflate(R.layout.popup_inputs, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        Runnable close = () -> closeMenu(true);
+        if (moduleCards) {
+            addInputRow(rows, close, R.drawable.ic_settings, getString(R.string.module_cards), -1, this::showModuleCards);
+        }
+        addInputRow(rows, close, R.drawable.ic_info, getString(R.string.hidden_apps), -1, this::showHiddenApps);
+        panel.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
+        int width = Math.max((int) (210 * density), panel.getMeasuredWidth());
+        panel.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
+        anchor.getLocationInWindow(menuAt);
+        root.getLocationInWindow(menuGliderAt);
+        int below = menuAt[1] - menuGliderAt[1] + anchor.getHeight() + (int) (18 * density) + panel.getMeasuredHeight();
+        showMenu(panel, rows, anchor, width, below > root.getHeight() - (int) (24 * density));
+    }
+
+    /** A list of apps hidden by the user; selecting one restores its tile without reinstalling it. */
+    private void showHiddenApps() {
+        List<String> hidden = adapter.userHiddenPackages();
+        if (hidden.isEmpty()) {
+            Toast.makeText(this, R.string.no_hidden_apps, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        View anchor = findViewById(R.id.btnSettings);
+        FrameLayout panel = (FrameLayout) getLayoutInflater().inflate(R.layout.popup_hidden_apps, root, false);
+        LinearLayout rows = panel.findViewById(R.id.rows);
+        android.widget.ScrollView list = panel.findViewById(R.id.hiddenScroll);
+        for (String pkg : hidden) {
+            String label = adapter.labelForPackage(pkg);
+            addInputRow(rows, () -> closeMenu(true), R.drawable.ic_info, getString(R.string.show_hidden_app, label), -1, () -> {
+                if (adapter.showPackage(pkg)) {
+                    reloadApps(false);
+                    Toast.makeText(this, getString(R.string.app_shown, label), Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+        rows.measure(View.MeasureSpec.makeMeasureSpec((int) (270 * density), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.UNSPECIFIED);
+        int maxListHeight = Math.max((int) (120 * density), root.getHeight() - (int) (190 * density));
+        list.getLayoutParams().height = Math.min(rows.getMeasuredHeight(), maxListHeight);
+        panel.measure(View.MeasureSpec.makeMeasureSpec((int) (270 * density), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.UNSPECIFIED);
+        anchor.getLocationInWindow(menuAt);
+        root.getLocationInWindow(menuGliderAt);
+        int below = menuAt[1] - menuGliderAt[1] + anchor.getHeight() + (int) (18 * density) + panel.getMeasuredHeight();
+        showMenu(panel, rows, anchor, (int) (270 * density), below > root.getHeight() - (int) (24 * density));
     }
 
     /** Picks the app up: it wiggles, the arrows carry it, and OK or Back puts it down. */
@@ -1371,16 +1522,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int to = movingPos;
         switch (keyCode) {
             case KeyEvent.KEYCODE_DPAD_LEFT:
-                if (movingPos % COLUMNS > 0) to = movingPos - 1;
+                if (movingPos > 0) to = movingPos - 1;
                 break;
             case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (movingPos % COLUMNS < COLUMNS - 1) to = Math.min(movingPos + 1, last);
+                if (movingPos < last) to = movingPos + 1;
                 break;
             case KeyEvent.KEYCODE_DPAD_UP:
-                if (movingPos >= COLUMNS) to = movingPos - COLUMNS;
-                break;
             case KeyEvent.KEYCODE_DPAD_DOWN:
-                if (movingPos / COLUMNS < last / COLUMNS) to = Math.min(movingPos + COLUMNS, last);
                 break;
             default:
                 return;
@@ -1395,7 +1543,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             public void onLayoutChange(View v, int l, int t, int r, int b, int ol, int ot, int or, int ob) {
                 grid.removeOnLayoutChangeListener(this);
                 grid.post(() -> {
-                    if (movingPos == pos && card != null && card.isAttachedToWindow()) onTileFocused(pos, card);
+                    if (movingPos == pos && card != null && card.isAttachedToWindow()) focusTile(pos);
                 });
             }
         });
@@ -1442,25 +1590,21 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.getItemCount();
-        int target;
-        // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
-        // escapes up into the top bar. Mid-row moves fall through to the default focus search.
+        // All apps share one horizontal row; left and right traverse the whole list.
         if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            return position % COLUMNS == 0;
+            if (position <= 0) return true;
+            focusTile(position - 1);
+            return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            return position % COLUMNS == COLUMNS - 1 || position == count - 1;
+            if (position >= count - 1) return true;
+            focusTile(position + 1);
+            return true;
         }
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
-            target = position - COLUMNS;
-        } else {
-            int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
-            if (position >= lastRowStart) return true;     // already on the last row: stay put
-            target = Math.min(position + COLUMNS, count - 1);
+            return false; // let focus return to the top bar
         }
-        focusTile(target);
-        return true;
+        return keyCode == KeyEvent.KEYCODE_DPAD_DOWN; // only one app row
     }
 
     /** The tile {@link #focusWhenSettled} focuses once the grid stops scrolling to it. */
@@ -1471,10 +1615,32 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (newState != RecyclerView.SCROLL_STATE_IDLE) return;
             rv.removeOnScrollListener(this);
             RecyclerView.ViewHolder h = rv.findViewHolderForAdapterPosition(pendingFocus);
-            View target = h != null ? h.itemView.findViewById(R.id.card) : rv.getChildAt(0);
-            if (target != null) target.requestFocus();
+            View target = h != null ? h.itemView.findViewById(R.id.card) : null;
+            if (target == null) return;
+            if (target.isFocused()) onTileFocused(pendingFocus, target);
+            else target.requestFocus();
         }
     };
+
+    /** Checks the focused tile and its glass rim against the horizontal viewport. */
+    private boolean needsHorizontalReveal(View item, View card) {
+        int edge = Math.round(card.getWidth() * (AppAdapter.FOCUS_SCALE - 1f) / 2f + 6 * density);
+        int left = item.getLeft() + card.getLeft() - edge;
+        int right = item.getLeft() + card.getRight() + edge;
+        return left < grid.getPaddingLeft() || right > grid.getWidth() - grid.getPaddingRight();
+    }
+
+    /** Uses one snap-to-nearest-edge animation for partially visible and off-screen apps. */
+    private void smoothScrollToTile(int position) {
+        pendingFocus = position;
+        grid.removeOnScrollListener(focusWhenSettled);
+        grid.addOnScrollListener(focusWhenSettled);
+        LinearSmoothScroller scroller = new LinearSmoothScroller(this) {
+            @Override protected int getHorizontalSnapPreference() { return SNAP_TO_ANY; }
+        };
+        scroller.setTargetPosition(position);
+        grid.getLayoutManager().startSmoothScroll(scroller);
+    }
 
     private void focusTile(int position) {
         if (adapter.getItemCount() == 0) {
@@ -1485,17 +1651,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
         if (vh != null) {
             View card = vh.itemView.findViewById(R.id.card);
-            // Already focused (e.g. back from an app): no focus change fires, so restore the glass by hand.
-            if (card.isFocused()) onTileFocused(pos, card);
-            else card.requestFocus();
-            return;
+            if (card != null && !needsHorizontalReveal(vh.itemView, card)) {
+                // Already focused (e.g. back from an app): no focus change fires, so restore the glass by hand.
+                if (card.isFocused()) onTileFocused(pos, card);
+                else card.requestFocus();
+                return;
+            }
         }
-        // Not laid out yet: scroll there, then focus once the scroll settles. One listener at most,
-        // aimed at the latest target, so asking again mid-scroll cannot pull focus back to an older one.
-        pendingFocus = pos;
-        grid.removeOnScrollListener(focusWhenSettled);
-        grid.addOnScrollListener(focusWhenSettled);
-        grid.smoothScrollToPosition(pos);
+        // Reveal the target, then focus after scrolling settles. This is the same in either direction.
+        smoothScrollToTile(pos);
     }
 
     // ---- top bar ---------------------------------------------------------------------------------
@@ -1504,32 +1668,170 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (shamsi) shamsiDate.setText(Shamsi.today());
     }
 
+    private void updateHeaderDate() {
+        TextView date = findViewById(R.id.date);
+        if (date != null) date.setText(new java.text.SimpleDateFormat("EEEE, d MMMM yyyy", new Locale("id", "ID"))
+                .format(new java.util.Date()));
+    }
+
+    private boolean hasLocationPermission() {
+        return checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                || checkSelfPermission(android.Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void startAutoLocation() {
+        if (!autoLocation && !showWeather) return;
+        if (!hasLocationPermission()) {
+            android.content.SharedPreferences p = getSharedPreferences("location", MODE_PRIVATE);
+            if (!p.getBoolean("permission_prompted", false)) {
+                p.edit().putBoolean("permission_prompted", true).apply();
+                requestPermissions(new String[]{android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                        android.Manifest.permission.ACCESS_FINE_LOCATION}, 70);
+            }
+            return;
+        }
+        locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        readLastKnownLocation();
+        if (locationManager == null || locationUpdatesStarted) return;
+        boolean registered = false;
+        for (String provider : locationManager.getProviders(true)) {
+            if (LocationManager.NETWORK_PROVIDER.equals(provider) || LocationManager.GPS_PROVIDER.equals(provider)
+                    || LocationManager.PASSIVE_PROVIDER.equals(provider)) {
+                try {
+                    locationManager.requestLocationUpdates(provider, 10L * 60 * 1000, 1000f, locationListener, Looper.getMainLooper());
+                    registered = true;
+                } catch (SecurityException e) {
+                    android.util.Log.w("TvHome.Location", "location permission is unavailable");
+                    return;
+                } catch (IllegalArgumentException e) {
+                    android.util.Log.w("TvHome.Location", "provider unavailable: " + provider);
+                }
+            }
+        }
+        locationUpdatesStarted = registered;
+    }
+
+    private void stopLocationUpdates() {
+        if (!locationUpdatesStarted || locationManager == null) return;
+        try { locationManager.removeUpdates(locationListener); }
+        catch (SecurityException ignored) { }
+        locationUpdatesStarted = false;
+    }
+
+    private void readLastKnownLocation() {
+        if (locationManager == null || !hasLocationPermission()) return;
+        try {
+            Location best = null;
+            for (String provider : locationManager.getProviders(true)) {
+                Location candidate = locationManager.getLastKnownLocation(provider);
+                if (candidate == null || System.currentTimeMillis() - candidate.getTime() > 12L * 60 * 60 * 1000) continue;
+                if (best == null || (candidate.hasAccuracy() && (!best.hasAccuracy() || candidate.getAccuracy() < best.getAccuracy()))) best = candidate;
+            }
+            if (best != null) acceptLocation(best);
+        } catch (SecurityException e) {
+            android.util.Log.w("TvHome.Location", "location permission is unavailable");
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 70 && hasLocationPermission()) startAutoLocation();
+    }
+
+    private void acceptLocation(Location location) {
+        if (location == null) return;
+        boolean moved = latestLocation == null || latestLocation.distanceTo(location) >= 1000f;
+        latestLocation = new Location(location);
+        if (moved) updateWeather();
+        if (!autoLocation) return;
+        PrayerTimes.City city = PrayerTimes.currentCity(this);
+        boolean cityChanged = city == null || lastPrayerCityLocation == null || lastPrayerCityLocation.distanceTo(location) >= 10_000f;
+        long retryDelay = city == null ? 30L * 60 * 1000 : 5L * 60 * 1000;
+        if (!cityChanged || prayerCityResolveRunning || System.currentTimeMillis() - lastPrayerCityAttempt < retryDelay) return;
+        prayerCityResolveRunning = true;
+        lastPrayerCityAttempt = System.currentTimeMillis();
+        Location snapshot = new Location(location);
+        new Thread(() -> {
+            PrayerTimes.City found = PrayerTimes.resolveCity(getApplicationContext(), snapshot);
+            handler.post(() -> {
+                prayerCityResolveRunning = false;
+                if (found != null) {
+                    lastPrayerCityLocation = snapshot;
+                    AzanAlarm.scheduleNext(getApplicationContext());
+                    updatePrayerTimes();
+                    updateWeather();
+                }
+            });
+        }, "prayer-city").start();
+    }
+
+    private void updateWeather() {
+        if (!showWeather || weatherLine == null || latestLocation == null) return;
+        Weather.Conditions cached = Weather.cached(this);
+        if (cached != null) {
+            PrayerTimes.City city = PrayerTimes.currentCity(this);
+            showWeather(cached, city != null ? city.label() : "");
+        }
+        if (weatherRefreshRunning || !Weather.due(this, latestLocation)) return;
+        weatherRefreshRunning = true;
+        Location snapshot = new Location(latestLocation);
+        new Thread(() -> {
+            Weather.Conditions current = Weather.fetch(snapshot.getLatitude(), snapshot.getLongitude());
+            if (current != null) Weather.save(getApplicationContext(), snapshot, current);
+            String label = PrayerTimes.displayLocation(getApplicationContext(), snapshot);
+            handler.post(() -> {
+                weatherRefreshRunning = false;
+                if (current != null && !isDestroyed()) showWeather(current, label);
+            });
+        }, "weather").start();
+    }
+
+    private void showWeather(Weather.Conditions current, String location) {
+        String text = current.text();
+        if (location != null && !location.isEmpty()) text += "  ·  " + location;
+        weatherLine.setText(text);
+        weatherLine.setContentDescription("Cuaca dari Open-Meteo: " + text);
+        weatherLine.setVisibility(View.VISIBLE);
+    }
+
     /**
      * Starts the azan when a prayer time has come, if Home is what is on screen. Under the
      * screensaver Home has no window focus, and the screensaver gives the azan itself.
      */
     private void checkAzan() {
         if (azan == null || azan.showing() || !hasWindowFocus()) return;
-        int due = Azan.takeDue(this, prayerZone);
-        if (due >= 0) azan.start(this, prayerZone, due, azanReducedMotion);
+        PrayerTimes.City city = PrayerTimes.currentCity(this);
+        if (city == null) return;
+        int due = Azan.takeDue(this, city.id);
+        if (due >= 0) azan.start(this, city.id, due, azanReducedMotion);
     }
 
     /**
-     * Today's five prayer times, the next one bright with how long until it. Fetches the year from
-     * e-Solat in the background when today is not on disk yet; until then the row stays hidden.
+     * Today's five prayer times, resolved from the TV's current Android location.
      */
     private void updatePrayerTimes() {
-        if (prayerZone == null || prayerZone.isEmpty()) return;
+        PrayerTimes.City city = PrayerTimes.currentCity(this);
+        if (city == null) {
+            prayerRow.setVisibility(View.GONE);
+            if (autoLocation && latestLocation != null) acceptLocation(latestLocation);
+            return;
+        }
         java.util.Calendar now = java.util.Calendar.getInstance();
         String todayKey = PrayerTimes.key(now);
-        PrayerTimes.Day today = PrayerTimes.day(this, prayerZone, todayKey);
+        PrayerTimes.Day today = PrayerTimes.day(this, city.id, todayKey);
         if (today == null) {
             prayerRow.setVisibility(View.GONE);
-            if (!prayerRefreshRunning && PrayerTimes.due(this, prayerZone, todayKey)) {
+            if (!prayerRefreshRunning && PrayerTimes.due(this, city.id, todayKey)) {
                 prayerRefreshRunning = true;
-                final String zone = prayerZone;
+                final String cityId = city.id;
                 new Thread(() -> {
-                    boolean ok = PrayerTimes.refresh(getApplicationContext(), zone);
+                    boolean ok = PrayerTimes.refresh(getApplicationContext(), cityId, todayKey);
+                    java.util.Calendar tomorrow = (java.util.Calendar) now.clone();
+                    tomorrow.add(java.util.Calendar.DAY_OF_MONTH, 1);
+                    String tomorrowKey = PrayerTimes.key(tomorrow);
+                    if (PrayerTimes.due(getApplicationContext(), cityId, tomorrowKey))
+                        PrayerTimes.refresh(getApplicationContext(), cityId, tomorrowKey);
                     handler.post(() -> {
                         prayerRefreshRunning = false;
                         if (ok) AzanAlarm.scheduleNext(getApplicationContext());
@@ -1545,20 +1847,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (next >= 0) {
             left = today.minutes[next] - nowMin;
         } else {
-            // After Isyak, the next is tomorrow's Subuh.
+            // After Isya, the next is tomorrow's Subuh.
             java.util.Calendar t = (java.util.Calendar) now.clone();
             t.add(java.util.Calendar.DAY_OF_MONTH, 1);
-            PrayerTimes.Day tomorrow = PrayerTimes.day(this, prayerZone, PrayerTimes.key(t));
+            PrayerTimes.Day tomorrow = PrayerTimes.day(this, city.id, PrayerTimes.key(t));
             left = 24 * 60 - nowMin + (tomorrow != null ? tomorrow : today).minutes[0];
         }
-        boolean is24 = android.text.format.DateFormat.is24HourFormat(this);
-        int bright = 0xFFFFFFFF, dim = 0x80FFFFFF;
-        android.text.SpannableStringBuilder b = new android.text.SpannableStringBuilder();
-        if (!today.hijri.isEmpty()) {
-            b.append(today.hijri);
-            b.setSpan(new android.text.style.ForegroundColorSpan(dim), 0, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            b.append("     ");
+        java.util.Calendar tomorrowDate = (java.util.Calendar) now.clone();
+        tomorrowDate.add(java.util.Calendar.DAY_OF_MONTH, 1);
+        String tomorrowKey = PrayerTimes.key(tomorrowDate);
+        if (PrayerTimes.day(this, city.id, tomorrowKey) == null && !prayerRefreshRunning
+                && PrayerTimes.due(this, city.id, tomorrowKey)) {
+            prayerRefreshRunning = true;
+            new Thread(() -> {
+                PrayerTimes.refresh(getApplicationContext(), city.id, tomorrowKey);
+                handler.post(() -> {
+                    prayerRefreshRunning = false;
+                    AzanAlarm.scheduleNext(getApplicationContext());
+                });
+            }, "prayer-tomorrow").start();
         }
+        boolean is24 = android.text.format.DateFormat.is24HourFormat(this);
+        int bright = 0xFFFFFFFF;
+        android.text.SpannableStringBuilder b = new android.text.SpannableStringBuilder();
         for (int i = 0; i < today.minutes.length; i++) {
             if (i > 0) b.append("    ");
             int start = b.length();
@@ -1568,7 +1879,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 b.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
         }
-        b.append("     ");
+        b.append("  │  ");
         int start = b.length();
         b.append(PrayerTimes.NAMES[next >= 0 ? next : 0]).append(" ").append(PrayerTimes.countdown(left));
         b.setSpan(new android.text.style.ForegroundColorSpan(bright), start, b.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
@@ -1661,6 +1972,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Hides the Inputs pill when it would have nothing to list: streaming boxes have no HDMI-in, AV or tuner. */
     private void updateInputsButton() {
+        if (config != null && !config.showInputs) {
+            btnInputs.setVisibility(View.GONE);
+            return;
+        }
         boolean any = liveTvIntent() != null || !sourcePanelService.isEmpty();
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (!any && tim != null) {
@@ -1672,6 +1987,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
         btnInputs.setVisibility(any ? View.VISIBLE : View.GONE);
+    }
+
+    /** Loads the short D-pad navigation tick before the app grid receives focus. */
+    private void prepareFocusSound() {
+        AudioAttributes attributes = new AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build();
+        focusSoundPool = new SoundPool.Builder()
+                .setMaxStreams(1)
+                .setAudioAttributes(attributes)
+                .build();
+        focusSoundPool.setOnLoadCompleteListener((pool, sampleId, status) -> {
+            if (sampleId == focusSoundId && status == 0) focusSoundLoaded = true;
+        });
+        focusSoundId = focusSoundPool.load(this, R.raw.navigation_focus, 1);
+    }
+
+    /** Plays a short, quiet SoundPool tick when D-pad focus moves to another app. */
+    private void playFocusSound() {
+        SoundPool pool = focusSoundPool;
+        if (pool == null || !focusSoundLoaded || focusSoundId == 0) return;
+        pool.play(focusSoundId, 0.42f, 0.42f, 1, 0, 1f);
     }
 
     /** The Live TV app's launch intent: its leanback entry point, or the configured action if it has none. */
@@ -1920,8 +2258,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             });
             return;
         }
-        float l = panel.getLeft() + rows.getLeft() + row.getLeft() - glider.getLeft();
-        float t = panel.getTop() + rows.getTop() + row.getTop() - glider.getTop();
+        row.getLocationInWindow(menuAt);
+        root.getLocationInWindow(menuGliderAt);
+        float l = menuAt[0] - menuGliderAt[0];
+        float t = menuAt[1] - menuGliderAt[1];
         gliderOnPill = true;
         glider.setStyle(Glider.DARK);
         glider.moveTo(l, t, l + row.getWidth(), t + row.getHeight(), 13 * density);

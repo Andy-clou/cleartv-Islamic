@@ -1,5 +1,14 @@
 {
-  "prayer_zone": "TRG04",
+  "auto_location": true,
+  "weather": true,
+  "download_masjid": true,
+  "download_azan": true,
+  "masjid_home": true,
+  "wallpaper_minutes": 3,
+  "show_network_pill": false,
+  "show_inputs": false,
+  "show_home_settings_shortcut": true,
+  "show_dock_tray": true,
   "azan": true,
   "reduced_motion": true
 }

@@ -21,16 +21,16 @@ import java.util.List;
 import java.util.Random;
 
 /**
- * The screensaver's Islamic face (dream_islamic.xml), used when a theme sets prayer_zone: the time,
- * the Malay and Hijri dates, today's prayer times with the next one in gold, and a verse of the Quran
+ * The screensaver's Islamic face (dream_islamic.xml), shown after automatic location is resolved: the time,
+ * the Indonesian and Hijri dates, today's prayer times with the next one in gold, and a verse of the Quran
  * with its translation (res/raw/ayat.json), changing every few minutes. ClockDream moves it about the
  * screen; this class fills it in and sizes it.
  */
 final class IslamicDream {
     private static final String TAG = "TvHome.Dream";
     private static final long VERSE_MS = 3 * 60_000L;
-    private static final String[] DAYS = {"Ahad", "Isnin", "Selasa", "Rabu", "Khamis", "Jumaat", "Sabtu"};
-    private static final String[] MONTHS = {"Januari", "Februari", "Mac", "April", "Mei", "Jun", "Julai", "Ogos",
+    private static final String[] DAYS = {"Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"};
+    private static final String[] MONTHS = {"Januari", "Februari", "Maret", "April", "Mei", "Juni", "Juli", "Agustus",
             "September", "Oktober", "November", "Disember"};
 
     final View content;

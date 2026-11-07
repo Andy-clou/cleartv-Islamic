@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="home_settings">Jadikan peluncur utama</string>
+    <string name="home_settings_help">Pilih Clear TV Islamic sebagai layar utama di setelan Android, lalu tekan tombol Home.</string>
+    <string name="home_settings_applied">Clear TV Islamic sekarang menjadi peluncur utama.</string>
+    <string name="home_settings_cancelled">Pilihan peluncur utama tidak diubah.</string>
+    <string name="home_settings_already_default">Clear TV Islamic sudah menjadi peluncur utama.</string>
+    <string name="not_available">Tidak tersedia di TV ini</string>
+    <string name="tile_move">Pindahkan</string>
+    <string name="tile_hide_app">Sembunyikan aplikasi</string>
+    <string name="tile_app_info">Info aplikasi</string>
+    <string name="hidden_apps">Aplikasi tersembunyi</string>
+    <string name="show_hidden_app">Tampilkan %1$s</string>
+    <string name="no_hidden_apps">Tidak ada aplikasi tersembunyi</string>
+    <string name="app_hidden">%1$s disembunyikan</string>
+    <string name="app_shown">%1$s ditampilkan</string>
+</resources>

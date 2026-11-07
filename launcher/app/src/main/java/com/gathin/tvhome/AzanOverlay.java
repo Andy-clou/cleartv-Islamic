@@ -68,14 +68,16 @@ public class AzanOverlay extends Service {
         goForeground();
         if (band != null) return START_NOT_STICKY;
         Config cfg = Config.load(this);
-        int index = Azan.takeDue(this, cfg.prayerZone);
+        PrayerTimes.City city = PrayerTimes.currentCity(this);
+        String cityId = city != null ? city.id : "";
+        int index = Azan.takeDue(this, cityId);
         if (index < 0 || !Settings.canDrawOverlays(this)) {
             if (index >= 0) Log.w(TAG, "no permission to show over other apps; run appops set "
                     + getPackageName() + " SYSTEM_ALERT_WINDOW allow");
             stopSelf();
             return START_NOT_STICKY;
         }
-        show(cfg.prayerZone, index);
+        show(cityId, index);
         play(index);
         Log.i(TAG, "azan " + PrayerTimes.NAMES[index] + " over another app");
         return START_NOT_STICKY;

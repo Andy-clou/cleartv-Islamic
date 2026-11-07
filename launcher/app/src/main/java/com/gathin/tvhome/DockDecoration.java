@@ -17,6 +17,7 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
 
     private final int dockSize;
     private final float density;
+    private final boolean showTray;
     private final Paint band = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final GlassRim edge;
     private Glider glider;
@@ -27,9 +28,10 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     /** The tray as last drawn, in the grid's coordinates: where the focus shape shows on it. */
     final RectF area = new RectF();
 
-    DockDecoration(int dockSize, float density) {
+    DockDecoration(int dockSize, float density, boolean showTray) {
         this.dockSize = dockSize;
         this.density = density;
+        this.showTray = showTray;
         // Same glass as the top-bar pills (GlassDrawable): an even veil and a shining edge.
         band.setColor(0x12FFFFFF);
         edge = new GlassRim(1.5f * density, 0xD9FFFFFF, 0x1AFFFFFF, 0.5f);
@@ -43,15 +45,17 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
     @Override
     public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
                                @NonNull RecyclerView.State state) {
-        int pos = parent.getChildAdapterPosition(view);
-        if (pos >= 0 && pos < dockSize) {
-            outRect.top = (int) (6 * density);
-            outRect.bottom = (int) (12 * density);
-        }
+        // Keep the same vertical gap between every row; the first row gets this spacing too.
+        outRect.top = Math.round(6 * density);
+        outRect.bottom = Math.round(12 * density);
     }
 
     @Override
     public void onDraw(@NonNull Canvas c, @NonNull RecyclerView parent, @NonNull RecyclerView.State state) {
+        if (!showTray) {
+            area.setEmpty();
+            return;
+        }
         boolean any = false;
         for (int i = 0; i < parent.getChildCount(); i++) {
             View child = parent.getChildAt(i);
@@ -75,7 +79,8 @@ public class DockDecoration extends RecyclerView.ItemDecoration {
         rect.inset(-pad, -pad);
         area.set(rect);
         float radius = 26 * density;
-        blur.draw(c, parent, rect, radius, 1f);
+        // Keep more of the sharp wallpaper visible through the tray so the glass feels lighter.
+        blur.draw(c, parent, rect, radius, 0.62f);
         c.drawRoundRect(rect, radius, radius, band);
         // The focus frame of a dock tile sits on the tray's glass and under the tiles; the rest of
         // the shape, outside the tray, is the glider itself showing behind.

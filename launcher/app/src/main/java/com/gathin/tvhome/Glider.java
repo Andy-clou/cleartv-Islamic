@@ -88,7 +88,7 @@ final class Glider extends View {
     private final float[] target = new float[5];
     private final boolean reducedMotion;
     /** How far a scrolling list has carried the shape since its target was set. */
-    private float yShift;
+    private float xShift, yShift;
     private float opacity;
     private boolean shown;
     private ValueAnimator fade;
@@ -177,9 +177,9 @@ final class Glider extends View {
 
     /** The target edges, in scroll-free space, in one reused array. */
     private float[] aim(float l, float t, float r, float b, float radius) {
-        target[LEFT] = l;
+        target[LEFT] = l - xShift;
         target[TOP] = t - yShift;
-        target[RIGHT] = r;
+        target[RIGHT] = r - xShift;
         target[BOTTOM] = b - yShift;
         target[RADIUS] = radius;
         return target;
@@ -249,8 +249,9 @@ final class Glider extends View {
         changed();
     }
 
-    /** A list scrolled by {@code dy}: the shape rides along with what it marks. */
-    void scrolled(float dy) {
+    /** A list scrolled by {@code dx}/{@code dy}: the shape rides along with what it marks. */
+    void scrolled(float dx, float dy) {
+        xShift -= dx;
         yShift -= dy;
         changed();
     }
@@ -265,7 +266,7 @@ final class Glider extends View {
      */
     float coverage(float dx, float dy, float w, float h) {
         if (!isShowing() || w <= 0f || h <= 0f) return 0f;
-        float ox = Math.min(edges[RIGHT] + dx, w) - Math.max(edges[LEFT] + dx, 0f);
+        float ox = Math.min(edges[RIGHT] + xShift + dx, w) - Math.max(edges[LEFT] + xShift + dx, 0f);
         float oy = Math.min(edges[BOTTOM] + yShift + dy, h) - Math.max(edges[TOP] + yShift + dy, 0f);
         if (ox <= 0f || oy <= 0f) return 0f;
         return Math.min(1f, (ox * oy) / (w * h)) * opacity;
@@ -281,7 +282,7 @@ final class Glider extends View {
         float t = edges[TOP] + yShift, b = edges[BOTTOM] + yShift;
         // Never rounder than the shape allows: a pill's ends stay round as it shrinks to a circle.
         float r = Math.min(edges[RADIUS], Math.min(b - t, edges[RIGHT] - edges[LEFT]) / 2f);
-        shape.set(edges[LEFT] + dx, t + dy, edges[RIGHT] + dx, b + dy);
+        shape.set(edges[LEFT] + xShift + dx, t + dy, edges[RIGHT] + xShift + dx, b + dy);
         if (style == DARK) {
             paint.setColor((int) (FOCUS_ALPHA * opacity) << 24);
             canvas.drawRoundRect(shape, r, r, paint);
@@ -355,8 +356,8 @@ final class Glider extends View {
         dirty.set(drawn);
         if (isShowing()) {
             float reach = 2f * shadowBlur + shadowDrop + 2f;
-            drawn.set(edges[LEFT] - reach, edges[TOP] + yShift - reach,
-                    edges[RIGHT] + reach, edges[BOTTOM] + yShift + reach);
+            drawn.set(edges[LEFT] + xShift - reach, edges[TOP] + yShift - reach,
+                    edges[RIGHT] + xShift + reach, edges[BOTTOM] + yShift + reach);
             dirty.union(drawn);
         } else {
             drawn.setEmpty();

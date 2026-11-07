@@ -29,7 +29,7 @@ import java.util.regex.Pattern;
  * Wallpapers of places to visit: once a week, takes the pictures Bing has shown on its home page over
  * the past days (landmarks, landscapes, wildlife), each with the place's name and a few lines about
  * it, keeps those with nobody in them, and deletes the week before. Needs no key and no account. The
- * launcher's only network use; "places": false in config.json turns it off.
+ * one optional wallpaper source; "places": false in config.json turns this source off.
  *
  * Runs on a background thread; every failure just leaves the previous pictures in place.
  */
