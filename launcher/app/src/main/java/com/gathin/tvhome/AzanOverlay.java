@@ -317,7 +317,7 @@ public class AzanOverlay extends Service {
             c.drawText("TELAH MASUK WAKTU", textX, cy - 18f * u, small);
             c.drawText(name, textX, baseName, big);
             c.drawText(line, textX + big.measureText(name) + 14f * u, baseName, info);
-            c.drawText("Tekan mana-mana butang untuk hentikan azan", w - cx + r, h - 12f * u, hint);
+            c.drawText("Tekan sembarang tombol untuk hentikan azan", w - cx + r, h - 12f * u, hint);
             if (running) postInvalidateOnAnimation();
         }
     }
